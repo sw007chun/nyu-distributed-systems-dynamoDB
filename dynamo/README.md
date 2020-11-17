@@ -1,4 +1,0 @@
-# Dynamo
-
-**TODO: Add description**
-

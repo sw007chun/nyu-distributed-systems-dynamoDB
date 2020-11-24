@@ -46,7 +46,8 @@ defmodule CHash do
   """
   @spec key_of(term()) :: index()
   def key_of(object_name) do
-    :crypto.hash(:sha, object_name)
+    # argument should be converted to binary
+    :crypto.hash(:sha, :erlang.term_to_binary(object_name))
   end
 
   @doc """
@@ -79,6 +80,14 @@ defmodule CHash do
   end
 
   @doc """
+  Return the node_entries
+  """
+  @spec nodes(%CHash{}) :: [node_entry()]
+  def nodes(chash) do
+    chash.node_entries
+  end
+
+  @doc """
   Return index increment between two subsequent partitions
   """
   @spec ring_increment(pos_integer()) :: pos_integer()
@@ -92,6 +101,21 @@ defmodule CHash do
   @spec size(%CHash{}) :: pos_integer()
   def size(chash) do
     length(chash.node_entries)
+  end
+
+  @doc """
+  Return n_val nodes following index.
+  This is used for preference list
+  """
+  @spec successors(index(), non_neg_integer(), %CHash{}) :: [node_entry()]
+  def successors(index, n_val, chash) do
+    num = min(n_val, chash.num_partitions)
+    <<index_as_int::160>> = index
+    inc = ring_increment(chash.num_partitions)
+    next_partition_index = div(index_as_int, inc) + 1
+    {first_n, following} = Enum.split(chash.node_entries, next_partition_index)
+    {result, _} = Enum.split(following ++ first_n, num)
+    result
   end
 
   @doc """

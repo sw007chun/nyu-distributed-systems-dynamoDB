@@ -1,9 +1,9 @@
-defmodule DynamoCoreSup.MixProject do
+defmodule Dynamo.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :dynamo_core_sup,
+      app: :dynamo,
       version: "0.1.0",
       build_path: "../../_build",
       config_path: "../../config/config.exs",
@@ -18,8 +18,8 @@ defmodule DynamoCoreSup.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
-      mod: {DynamoCoreSup.Application, []}
+      extra_applications: [:logger, :crypto],
+      mod: {Dynamo.Application, []}
     ]
   end
 

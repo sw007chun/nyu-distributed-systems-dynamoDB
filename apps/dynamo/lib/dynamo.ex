@@ -1,6 +1,6 @@
-defmodule DynamoCoreSup do
+defmodule Dynamo do
   @moduledoc """
-  Documentation for `DynamoCoreSup`.
+  Documentation for `Dynamo`.
   """
 
   @doc """
@@ -8,7 +8,7 @@ defmodule DynamoCoreSup do
 
   ## Examples
 
-      iex> DynamoCoreSup.hello()
+      iex> Dynamo.hello()
       :world
 
   """

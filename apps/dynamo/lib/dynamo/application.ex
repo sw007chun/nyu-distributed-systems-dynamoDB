@@ -1,4 +1,4 @@
-defmodule DynamoCoreSup.Application do
+defmodule Dynamo.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
@@ -7,13 +7,12 @@ defmodule DynamoCoreSup.Application do
 
   def start(_type, _args) do
     children = [
-      # Starts a worker by calling: DynamoCoreSup.Worker.start_link(arg)
-      # {DynamoCoreSup.Worker, arg}
+      Dynamo.Supervisor
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: DynamoCoreSup.Supervisor]
+    opts = [strategy: :one_for_one, name: Dynamo.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end

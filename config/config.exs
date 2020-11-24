@@ -16,3 +16,9 @@ import Config
 #       format: "$date $time [$level] $metadata$message\n",
 #       metadata: [:user_id]
 #
+
+# if Mix.env() == :prod do
+    config :dynamo, :ring_size, 8
+if Mix.env() == :dev do
+    config :dynamo, :vnode_module, Vnode
+end

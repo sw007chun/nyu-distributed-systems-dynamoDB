@@ -6,6 +6,7 @@ defmodule Ring.Manager do
   use GenServer
 
   @type chash_node() :: term()
+  @type index() :: <<_::160>>
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, :ok, opts)
@@ -14,7 +15,7 @@ defmodule Ring.Manager do
   @doc """
   Return preference list of size n_val
   """
-  @spec get_preference_list(integer(), integer()) :: [chash_node()]
+  @spec get_preference_list(index(), integer()) :: [chash_node()]
   def get_preference_list(index, n_val) do
     GenServer.call(__MODULE__, {:get_preference_list, index, n_val})
   end

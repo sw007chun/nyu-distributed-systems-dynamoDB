@@ -1,4 +1,4 @@
-defmodule Dynamo.MixProject do
+defmodule DynamoProject.MixProject do
   use Mix.Project
 
   def project do

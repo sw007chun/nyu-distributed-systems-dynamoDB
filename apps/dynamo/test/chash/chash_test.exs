@@ -26,6 +26,19 @@ defmodule CHashTest do
 
     assert CHash.members(first_update) == [new_node, node]
     assert CHash.members(third_update) == [new_node, node]
+  end
 
+  test "successor test" do
+    node = "old@host"
+    new_node = "new@host"
+
+    chash = CHash.new_ring(8, node)
+    {:ok, {index, _}} = Enum.fetch(chash.node_entries, 3)
+    updated_ring = CHash.update(index, new_node, chash)
+    bin_index = <<(index - 10)::160>>
+    successors = CHash.successors(bin_index, 8, updated_ring)
+
+    assert length(successors) == 8
+    assert {:ok, {_, ^new_node}} = Enum.fetch(successors, 0)
   end
 end

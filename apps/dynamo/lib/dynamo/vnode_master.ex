@@ -12,17 +12,25 @@ defmodule Vnode.Master do
   end
 
   @doc """
-  This delivers the command to the appropriate vnode synchronously.
+  This delivers the command to the appropriate node synchronously.
   """
   @spec sync_command(index_as_int(), term()) :: term()
-  def sync_command({index, _node}, msg) do
-    pid = Vnode.Manager.get_vnode_pid(index)
-    GenServer.call(pid, msg)
+  def sync_command({index, node}, msg) do
+    GenServer.call({__MODULE__, node}, {:sync_command, Node.self(), index, msg})
   end
 
   @impl true
   def init(:ok) do
     Vnode.Manager.start_ring
     {:ok, []}
+  end
+
+  # Find pid of vnode responsible for hat index and send command.
+  @impl true
+  def handle_call({:sync_command, sender, index, msg}, _from, state) do
+    IO.puts "Received command #{inspect(msg)} from #{sender}"
+    pid = Vnode.Manager.get_vnode_pid(index)
+    result = GenServer.call(pid, msg)
+    {:reply, result, state}
   end
 end

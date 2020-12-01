@@ -42,6 +42,14 @@ defmodule CHash do
   end
 
   @doc """
+  Return indices of the ring
+  """
+  @spec all_indices(%CHash{}) :: [index_as_int()]
+  def all_indices(chash) do
+    for {index, _owner} <- chash.node_entries, do: index
+  end
+
+  @doc """
   Return SHA-1 hash value of an object
   """
   @spec key_of(term()) :: index()
@@ -121,8 +129,8 @@ defmodule CHash do
   @doc """
   Replace the owner of the partition at index
   """
-  @spec update(index_as_int(), chash_node(), %CHash{}) :: %CHash{}
-  def update(index_as_int, new_node, chash) do
+  @spec update_owner(index_as_int(), chash_node(), %CHash{}) :: %CHash{}
+  def update_owner(index_as_int, new_node, chash) do
     new_node_entries =
       List.keyreplace(
         chash.node_entries,

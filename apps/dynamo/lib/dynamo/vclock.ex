@@ -1,4 +1,8 @@
 defmodule VClock do
+  @moduledoc """
+  Vector clock implementation.
+  It's used for ring reconciliation.
+  """
 
   @type vclock_node() :: term()
   @type counter() :: integer()
@@ -77,6 +81,4 @@ defmodule VClock do
         :concurrent
     end
   end
-
-
 end

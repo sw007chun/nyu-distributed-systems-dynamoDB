@@ -45,24 +45,19 @@ defmodule Ring do
         }
   end
 
+  @spec ring_size(ring()) :: non_neg_integer()
+  def ring_size(ring) do
+    CHash.size(ring.chring)
+  end
+
+  @spec num_partitions(ring()) :: non_neg_integer()
   def num_partitions(ring) do
     CHash.size(ring.chring)
   end
 
+  @spec all_indices(%Ring{}) :: [index_as_int()]
   def all_indices(ring) do
     CHash.all_indices(ring.chring)
-  end
-
-  @spec get_members(members()) :: [node_name()]
-  defp get_members(members) do
-    get_members(members, [:joining, :valid, :leaving, :exiting, :down])
-  end
-
-  @spec get_members(members(), [member_status()]) :: [node_name()]
-  defp get_members(members, types) do
-    for {node, {status, _vclock}} <- members, Enum.member?(types, status) do
-      node
-    end
   end
 
   @spec add_member(ring(), ring(), node_name()) :: ring()
@@ -105,14 +100,19 @@ defmodule Ring do
     %{ring | node_name: node}
   end
 
-  def claimant(ring) do
-    ring.claimant
+  @spec get_members(members()) :: [node_name()]
+  defp get_members(members) do
+    get_members(members, [:joining, :valid, :leaving, :exiting, :down])
   end
 
-  def set_claimant(ring, node) do
-    %{ring | claimant: node}
+  @spec get_members(members(), [member_status()]) :: [node_name()]
+  defp get_members(members, types) do
+    for {node, {status, _vclock}} <- members, Enum.member?(types, status) do
+      node
+    end
   end
 
+  @spec active_members(%Ring{}) :: [node_name()]
   def active_members(ring) do
     get_members(ring.members, [:joining, :valid, :leaving, :exiting])
   end
@@ -122,10 +122,12 @@ defmodule Ring do
     get_members(ring.members)
   end
 
+  @spec claiming_members(%Ring{}) :: [node_name()]
   def claiming_members(ring) do
     get_members(ring.members, [:joining, :valid, :down])
   end
 
+  @spec members(%Ring{}, [member_status()]) :: [node_name()]
   def members(ring, types) do
     get_members(ring.members, types)
   end
@@ -158,6 +160,14 @@ defmodule Ring do
   @spec owner_node(%Ring{}) :: atom()
   def owner_node(ring) do
     ring.node_name
+  end
+
+  def claimant(ring) do
+    ring.claimant
+  end
+
+  def set_claimant(ring, node) do
+    %{ring | claimant: node}
   end
 
   @doc """
@@ -210,6 +220,7 @@ defmodule Ring do
     end
   end
 
+  # Merge two concurrent memeber status base on priority
   @spec merge_status(member_status(), member_status()) :: member_status()
   def merge_status(status1, status2) do
     case {status1, status2} do
@@ -247,12 +258,14 @@ defmodule Ring do
     end
   end
 
+  @doc """
+  Reconcile two rings based on vector clocks.
+  """
   @spec reconcile(%Ring{}, %Ring{}) :: {atom(), %Ring{}}
   def reconcile(ring1, ring2) do
     my_node = owner_node(ring1)
     merged_vclock = VClock.merge_vclocks(ring1.vclock, ring2.vclock)
 
-    # TODO : seen changed?
     case VClock.compare_vclocks(ring1.vclock, ring2.vclock) do
       :before ->
         {:new_ring, %{ring2 | vclock: merged_vclock}}
@@ -266,6 +279,9 @@ defmodule Ring do
     end
   end
 
+  @doc """
+  Reconcile two concurrent rings
+  """
   @spec reconcile_divergent(node_name(), %Ring{}, %Ring{}) :: %Ring{}
   def reconcile_divergent(node, ring1, ring2) do
     new_vclock = VClock.increment(node, VClock.merge_vclocks(ring1.vclock, ring2.vclock))
@@ -291,11 +307,9 @@ defmodule Ring do
       end)
   end
 
-  @spec ring_size(ring()) :: non_neg_integer()
-  def ring_size(ring) do
-    CHash.size(ring.chring)
-  end
-
+  @doc """
+  Transfers owner of the partition at index with a new node
+  """
   @spec transfer_node(index_as_int(), node_name(), ring()) :: ring()
   def transfer_node(index, node, my_ring) do
     case CHash.lookup(index, my_ring.chring) do

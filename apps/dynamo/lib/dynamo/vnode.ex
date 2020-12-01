@@ -17,6 +17,8 @@ defmodule Vnode do
     GenServer.start_link(__MODULE__, index)
   end
 
+  # Vnode keeps state partition, the index of partition it's in charge
+  # and data, a key/value store
   @impl true
   def init(partition) do
     {:ok, %{:partition => partition, :data => %{}}}

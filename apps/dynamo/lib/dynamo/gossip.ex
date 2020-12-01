@@ -9,10 +9,15 @@ defmodule Ring.Gossip do
     GenServer.start_link(__MODULE__, :ok, opts)
   end
 
+  # Send a ring to other remote node
   def send_ring(ring, other_node) do
     GenServer.cast({__MODULE__, other_node}, {:send_ring_to, ring})
   end
 
+  @doc """
+  Reconciles two rings. Normally called when the node received
+  a new ring from gossip
+  """
   @spec reconcile(ring(), ring()) :: none()
   def reconcile(my_ring, other_ring) do
     my_node = Node.self()
@@ -29,7 +34,9 @@ defmodule Ring.Gossip do
         false ->
           Ring.reconcile(my_ring, other_ring)
       end
+
     IO.puts changed
+
     case changed do
       :new_ring ->
         # Skipped Ring.ring_ready
@@ -40,6 +47,12 @@ defmodule Ring.Gossip do
     end
   end
 
+  @doc """
+  Send ring information to two other nodes.
+  Nodes that received will gossip recursively until
+  it has received the same ring from gossip.
+  """
+  @spec recursive_gossip(ring()) :: :ok
   def recursive_gossip(ring) do
     my_node = Node.self()
     active_nodes = Ring.active_members(ring)

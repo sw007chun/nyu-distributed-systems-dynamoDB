@@ -10,6 +10,23 @@ defmodule DynamoProject.MixProject do
       dializer: [
         plt_add_deps: :apps_direct
       ],
+      releases: [
+        foo: [
+          version: "0.0.1",
+          applications: [dynamo: :permanent],
+          cookie: "weknoweachother",
+        ],
+        bar: [
+          version: "0.0.1",
+          applications: [dynamo: :permanent],
+          cookie: "weknoweachother",
+        ],
+        baz: [
+          version: "0.0.1",
+          applications: [dynamo: :permanent],
+          cookie: "weknoweachother",
+        ],
+      ]
     ]
   end
 

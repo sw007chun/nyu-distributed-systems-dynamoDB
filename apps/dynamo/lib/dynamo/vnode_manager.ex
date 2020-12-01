@@ -15,11 +15,10 @@ defmodule Vnode.Manager do
     GenServer.cast(__MODULE__, :stop)
   end
 
-  @doc """
-  Return the PID of parition index.
-  If the index is not in the index_table, start the vnode first
-  and update the index_table and return the pid
-  """
+
+  # Return the PID of parition index.
+  # If the index is not in the index_table, start the vnode first
+  # and update the index_table and return the pid
   @spec get_vnode(index_as_int()) :: pid()
   defp get_vnode(index) do
     pid = Agent.get(:index_table, fn table -> Map.get(table, index, :none) end)
@@ -45,7 +44,7 @@ defmodule Vnode.Manager do
   This is part of initialization process. It starts all the vnode.
   """
   def start_ring do
-    ring = Ring.Manager.get_ring
+    {:ok, ring} = Ring.Manager.get_my_ring
 
     startable_vnodes = Ring.my_indices(ring)
     for index <- startable_vnodes do

@@ -35,7 +35,7 @@ defmodule Ring.Gossip do
           Ring.reconcile(my_ring, other_ring)
       end
 
-    IO.puts changed
+    # IO.puts changed
 
     case changed do
       :new_ring ->

@@ -210,6 +210,11 @@ defmodule Ring do
     IO.puts ""
   end
 
+  @spec member_status(%Ring{}, node_name()) :: member_status()
+  def member_status(%Ring{members: members}, node) do
+    member_status(members, node)
+  end
+
   @spec member_status([members()], node_name()) :: member_status()
   def member_status(members, node) do
     case Map.get(members, node) do

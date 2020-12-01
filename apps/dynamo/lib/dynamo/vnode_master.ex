@@ -28,7 +28,7 @@ defmodule Vnode.Master do
 
   @impl true
   def handle_call({:sync_command, sender, index, msg}, _from, state) do
-    IO.puts "Received command #{msg} from #{sender}"
+    IO.puts "Received command #{inspect(msg)} from #{sender}"
     pid = Vnode.Manager.get_vnode_pid(index)
     result = GenServer.call(pid, msg)
     {:reply, result, state}

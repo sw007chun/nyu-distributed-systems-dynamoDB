@@ -5,4 +5,9 @@ defmodule Ping.Example do
     [index_node] = preflist
     Vnode.Master.sync_command(index_node, :ping)
   end
+
+  def ring_status do
+    {:ok, ring} = Ring.Manager.get_my_ring
+    Ring.print_status(ring)
+  end
 end

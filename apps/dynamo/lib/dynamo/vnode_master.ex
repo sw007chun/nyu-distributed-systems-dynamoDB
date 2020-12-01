@@ -15,14 +15,22 @@ defmodule Vnode.Master do
   This delivers the command to the appropriate vnode synchronously.
   """
   @spec sync_command(index_as_int(), term()) :: term()
-  def sync_command({index, _node}, msg) do
-    pid = Vnode.Manager.get_vnode_pid(index)
-    GenServer.call(pid, msg)
+  def sync_command({index, node}, msg) do
+    # pid = Vnode.Manager.get_vnode_pid(index)
+    GenServer.call({__MODULE__, node}, {:sync_command, Node.self(), index, msg})
   end
 
   @impl true
   def init(:ok) do
     Vnode.Manager.start_ring
     {:ok, []}
+  end
+
+  @impl true
+  def handle_call({:sync_command, sender, index, msg}, _from, state) do
+    IO.puts "Received command #{msg} from #{sender}"
+    pid = Vnode.Manager.get_vnode_pid(index)
+    result = GenServer.call(pid, msg)
+    {:reply, result, state}
   end
 end

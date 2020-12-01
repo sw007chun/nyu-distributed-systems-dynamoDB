@@ -24,7 +24,6 @@ defmodule Vnode do
 
   @impl true
   def handle_call(:ping, _from, state) do
-    IO.puts "Received ping command #{state.partition}"
     {:reply, {:pong, state.partition}, state}
   end
 end

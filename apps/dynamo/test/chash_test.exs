@@ -14,8 +14,8 @@ defmodule CHashTest do
     {:ok, {first_index, _}} = Enum.fetch(chash.node_entries, 0)
     {:ok, {third_index, _}} = Enum.fetch(chash.node_entries, 2)
 
-    first_update = CHash.update(first_index, new_node, chash)
-    third_update = CHash.update(third_index, new_node, chash)
+    first_update = CHash.update_owner(first_index, new_node, chash)
+    third_update = CHash.update_owner(third_index, new_node, chash)
     %CHash{num_partitions: 5, node_entries: [{_, ^new_node}, {_, ^node}, {_, ^node}, {_, ^node}, {_, ^node}, {_, ^node}]} =
         first_update
     %CHash{num_partitions: 5, node_entries: [{_, ^node}, {_, ^node}, {_, ^new_node}, {_, ^node}, {_, ^node}, {_, ^node}]} =
@@ -34,7 +34,7 @@ defmodule CHashTest do
 
     chash = CHash.new_ring(8, node)
     {:ok, {index, _}} = Enum.fetch(chash.node_entries, 3)
-    updated_ring = CHash.update(index, new_node, chash)
+    updated_ring = CHash.update_owner(index, new_node, chash)
     bin_index = <<(index - 10)::160>>
     successors = CHash.successors(bin_index, 8, updated_ring)
 

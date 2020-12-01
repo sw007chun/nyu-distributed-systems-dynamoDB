@@ -62,36 +62,38 @@ defmodule Ring.Claimant do
     Ring.claiming_members(ring)
     |> Enum.reduce(ring,
       fn node, ring ->
-        claim_until_balanced(ring, node)
+        claim(ring, node)
       end)
   end
 
-  def claim_until_balanced(ring, node) do
+  def claim(ring, node) do
     case needs_claim(ring, node) do
-      :no ->
-        ring
-      {:yes, num_to_claim} ->
+      true ->
         choose_claim(ring, node)
+      false ->
+        ring
     end
   end
 
   @doc """
-  Checks if node has lower than a vnodes.
+  Checks if a node has lower than average vnodes.
   """
   def needs_claim(ring, node) do
     active = Ring.claiming_members(ring)
     owners = Ring.all_index_owners(ring)
     counter = get_counts(active, owners)
+
     num_active_nodes = length(active)
     ring_size = Ring.num_partitions(ring)
     average_count = div(ring_size, num_active_nodes)
 
-    case Map.get(counter, node) < average_count do
-      true ->
-        {:yes, average_count - Map.get(counter, node)}
-      false ->
-        :no
-    end
+    Map.get(counter, node) < average_count
+    # case Map.get(counter, node) < average_count do
+    #   true ->
+    #     :yes
+    #   false ->
+    #     :no
+    # end
   end
 
   @doc """
@@ -130,15 +132,15 @@ defmodule Ring.Claimant do
     counter = Map.new(nodes, fn node -> {node, 0} end)
 
     partition_owners
-    |> Enum.reduce(
-      counter,
-      fn {_index, owner}, counter0 ->
-        case Enum.member?(nodes, owner) do
-          true ->
-            Map.update(counter0, owner, 1, &(&1 + 1))
-          false ->
-            counter0
-        end
-      end)
+    |>  Enum.reduce(
+        counter,
+        fn {_index, owner}, counter0 ->
+          case Enum.member?(nodes, owner) do
+            true ->
+              Map.update(counter0, owner, 1, &(&1 + 1))
+            false ->
+              counter0
+          end
+        end)
   end
 end

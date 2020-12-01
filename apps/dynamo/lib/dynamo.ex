@@ -34,7 +34,7 @@ defmodule Dynamo do
   end
 
   @spec join(atom(), ring()) :: :ok | {:error, atom()}
-  def join(other_node, other_ring) do
+  defp join(other_node, other_ring) do
     my_node = Node.self()
     {:ok, my_ring} = Ring.Manager.get_my_ring()
     same_size = Ring.ring_size(my_ring) == Ring.ring_size(other_ring)

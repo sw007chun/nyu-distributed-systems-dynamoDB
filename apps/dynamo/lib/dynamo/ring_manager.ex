@@ -13,6 +13,22 @@ defmodule Ring.Manager do
     GenServer.start_link(__MODULE__, :ok, opts)
   end
 
+  @impl true
+  def init(:ok) do
+    ring = Ring.new_ring()
+    {:ok, ring}
+  end
+
+  @spec get_my_ring :: ring()
+  def get_my_ring do
+    GenServer.call(__MODULE__, :get_my_ring)
+  end
+
+  @spec set_my_ring(ring()) :: :ok
+  def set_my_ring(new_ring) do
+    GenServer.call(__MODULE__, {:set_my_ring, new_ring})
+  end
+
   @doc """
   Return preference list of size n_val
   """
@@ -21,39 +37,25 @@ defmodule Ring.Manager do
     GenServer.call(__MODULE__, {:get_preference_list, index, n_val})
   end
 
-  @doc """
-  Return current ring status
-  """
-  @spec get_my_ring :: ring()
-  def get_my_ring do
-    GenServer.call(__MODULE__, :get_my_ring)
-  end
-
   @spec ring_transform(function(), [term()]) :: none()
   def ring_transform(fun, args) do
     GenServer.call(__MODULE__, {:ring_transform, fun, args})
   end
 
-  @spec set_my_ring(ring()) :: :ok
-  def set_my_ring(new_ring) do
-    GenServer.call(__MODULE__, {:set_my_ring, new_ring})
+  @impl true
+  def handle_call(:get_my_ring, _from, ring) do
+    {:reply, {:ok, ring}, ring}
   end
 
   @impl true
-  def init(:ok) do
-    ring = Ring.new_ring()
-    {:ok, ring}
+  def handle_call({:set_my_ring, new_ring}, _from, _prev_ring) do
+    {:reply, new_ring, new_ring}
   end
 
   @impl true
   def handle_call({:get_preference_list, index, n_val}, _from, ring) do
     successors = CHash.successors(index, n_val, ring.chring)
     {:reply, successors, ring}
-  end
-
-  @impl true
-  def handle_call(:get_my_ring, _from, ring) do
-    {:reply, {:ok, ring}, ring}
   end
 
   @impl true
@@ -69,10 +71,5 @@ defmodule Ring.Manager do
       _ ->
         {:reply, :not_changed, ring}
     end
-  end
-
-  @impl true
-  def handle_call({:set_my_ring, new_ring}, _from, _prev_ring) do
-    {:reply, new_ring, new_ring}
   end
 end

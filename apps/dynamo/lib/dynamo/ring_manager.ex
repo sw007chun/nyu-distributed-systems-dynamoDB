@@ -58,11 +58,20 @@ defmodule Ring.Manager do
     {:reply, successors, ring}
   end
 
+
+  @doc """
+  Transforms the ring and if the ring has changed, gossip about it
+  """
   @impl true
   def handle_call({:ring_transform, fun, args}, _from, ring) do
     case fun.(ring, args) do
-    # case Ring.Gossip.reconcile(ring, args) do
+      {:new_ring, new_ring} ->
+        # a node leaving the cluster
+        Ring.Gossip.random_recursive_gossip(new_ring)
+        fresh_ring = Ring.new_ring
+        {:reply, fresh_ring, fresh_ring}
       {:reconciled_ring, new_ring} ->
+        # a node joining the cluster
         Ring.Gossip.recursive_gossip(new_ring)
         {:reply, new_ring, new_ring}
       :ignore ->

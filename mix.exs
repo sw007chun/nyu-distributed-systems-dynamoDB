@@ -26,6 +26,11 @@ defmodule DynamoProject.MixProject do
           applications: [dynamo: :permanent],
           cookie: "weknoweachother",
         ],
+        swchun: [
+          version: "0.0.1",
+          applications: [dynamo: :permanent],
+          cookie: "weknoweachother",
+        ],
       ]
     ]
   end

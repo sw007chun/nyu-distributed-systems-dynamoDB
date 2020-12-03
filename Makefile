@@ -8,3 +8,6 @@ bar:
 
 baz:
 	mix release baz && _build/dev/rel/baz/bin/baz start_iex
+
+swchun:
+	mix release swchun && _build/dev/rel/swchun/bin/swchun start_iex

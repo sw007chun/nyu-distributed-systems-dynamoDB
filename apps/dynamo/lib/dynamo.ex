@@ -57,4 +57,33 @@ defmodule Dynamo do
         |> Ring.Gossip.send_ring(other_node)
     end
   end
+
+  def leave do
+    my_node = Node.self()
+    {:ok, my_ring} = Ring.Manager.get_my_ring()
+
+    case {Ring.all_members(my_ring), Ring.member_status(my_ring, my_node)} do
+      {_, :invalid} ->
+        {:error, :not_member}
+      {[^my_node], _} ->
+        {:error, :only_member}
+      {_, :valid} ->
+        leave(my_node)
+      {_, _} ->
+        {:error, :already_leaving}
+    end
+  end
+
+  @spec leave(node()) :: none()
+  def leave(node) do
+    _fresh_ring =
+      Ring.Manager.ring_transform(
+        fn my_ring, _ ->
+          new_ring = Ring.leave_member(node, my_ring, node)
+          {:new_ring, new_ring}
+        end, [])
+
+    IO.puts "#{node} has left the cluster"
+    :ok
+  end
 end

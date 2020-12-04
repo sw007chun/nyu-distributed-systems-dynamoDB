@@ -14,9 +14,11 @@ defmodule Ring.Claimant do
 
   def do_claimant(node, ring) do
     joining_nodes = get_joining_nodes(ring)
-    {changed, ring_2} = handle_joining(node, ring, joining_nodes)
+    {changed_join, ring_2} = handle_joining(node, ring, joining_nodes)
+    leaving_nodes = get_leaving_nodes(ring_2)
+    {changed_leave, ring_3} = handle_remove(node, ring_2, leaving_nodes)
 
-    {changed, rebalance(ring_2)}
+    {changed_join or changed_leave, rebalance(ring_3)}
 
     # case joining_nodes == [] do
     #   true ->
@@ -29,6 +31,11 @@ defmodule Ring.Claimant do
   @spec get_joining_nodes(ring()) :: [node_name()]
   def get_joining_nodes(ring) do
     Ring.members(ring, [:joining])
+  end
+
+  @spec get_leaving_nodes(ring()) :: [node_name()]
+  def get_leaving_nodes(ring) do
+    Ring.members(ring, [:leaving])
   end
 
   # Joining nodes to valid nodes
@@ -47,6 +54,18 @@ defmodule Ring.Claimant do
     #   _ ->
     #     {false, ring}
     # end
+  end
+
+  def handle_remove(node, ring, leaving_nodes) do
+    changed = Enum.empty?(leaving_nodes)
+    new_ring =
+    leaving_nodes
+      |> Enum.reduce(ring,
+        fn leave_node, ring0 ->
+          Ring.set_member(node, ring0, leave_node, :invalid)
+        end)
+
+    {changed, new_ring}
   end
 
   # def maybe_update_ring(node, ring) do
@@ -88,12 +107,6 @@ defmodule Ring.Claimant do
     average_count = div(ring_size, num_active_nodes)
 
     Map.get(counter, node) < average_count
-    # case Map.get(counter, node) < average_count do
-    #   true ->
-    #     :yes
-    #   false ->
-    #     :no
-    # end
   end
 
   @doc """

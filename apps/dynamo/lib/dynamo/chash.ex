@@ -111,8 +111,25 @@ defmodule CHash do
     length(chash.node_entries)
   end
 
+
   @doc """
-  Return n_val nodes following index.
+  Return previous n node entries.
+  This is used for preference list
+  """
+  @spec predecessors(index(), non_neg_integer(), %CHash{}) :: [node_entry()]
+  def predecessors(index, n_val, chash) do
+    num = min(n_val, chash.num_partitions)
+    <<index_as_int::160>> = index
+    inc = ring_increment(chash.num_partitions)
+    next_partition_index = div(index_as_int, inc) + 1
+    {first_n, following} = Enum.split(chash.node_entries, next_partition_index)
+    following ++ first_n
+    |> Enum.reverse
+    |> Enum.take(num)
+  end
+
+  @doc """
+  Return following n node entries.
   This is used for preference list
   """
   @spec successors(index(), non_neg_integer(), %CHash{}) :: [node_entry()]
@@ -122,8 +139,7 @@ defmodule CHash do
     inc = ring_increment(chash.num_partitions)
     next_partition_index = div(index_as_int, inc) + 1
     {first_n, following} = Enum.split(chash.node_entries, next_partition_index)
-    {result, _} = Enum.split(following ++ first_n, num)
-    result
+    Enum.take(following ++ first_n, num)
   end
 
   @doc """

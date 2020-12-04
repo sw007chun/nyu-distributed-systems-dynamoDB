@@ -8,16 +8,27 @@ defmodule KV do
     Ring.print_status(ring)
   end
 
+  @spec put(term(), term()) :: term()
   def put(key, value) do
     sync_command(key, {:put, key, value})
   end
 
+  @spec get(term()) :: term()
   def get(key) do
     sync_command(key, {:get, key})
   end
 
+  @spec delete(term()) :: term()
   def delete(key) do
     sync_command(key, {:delete, key})
+  end
+
+  @doc """
+  Return key/value store of certain partition.
+  """
+  @spec get_my_data(non_neg_integer()) :: term()
+  def get_my_data(partition) do
+    Vnode.Master.sync_command({partition, Node.self()}, :get_my_data)
   end
 
   def sync_command(key, command) do

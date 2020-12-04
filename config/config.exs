@@ -17,8 +17,6 @@ import Config
 #       metadata: [:user_id]
 #
 
-# if Mix.env() == :prod do
-    config :dynamo, :ring_size, 8
-if Mix.env() == :dev do
-    config :dynamo, :vnode_module, Vnode
-end
+config :dynamo,
+  ring_size: 8,
+  replication: 3

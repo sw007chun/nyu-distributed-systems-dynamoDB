@@ -7,6 +7,7 @@ defmodule Ring.Manager do
 
   @type chash_node() :: term()
   @type index() :: <<_::160>>
+  @type index_as_int() :: non_neg_integer()
   @type ring() :: Ring
 
   def start_link(opts) do
@@ -32,9 +33,24 @@ defmodule Ring.Manager do
   @doc """
   Return preference list of size n_val
   """
+  def get_preference_list(index, n_val) when is_integer(index) do
+    get_preference_list(<<index::160>>, n_val)
+  end
+
   @spec get_preference_list(index(), integer()) :: [chash_node()]
   def get_preference_list(index, n_val) do
     GenServer.call(__MODULE__, {:get_preference_list, index, n_val})
+  end
+
+  @doc """
+  Return indices that a vnode has to stores. (n-1) previous indicies
+  """
+  def get_replicated_indices(index) when is_integer(index) do
+    get_replicated_indices(<<index::160>>)
+  end
+
+  def get_replicated_indices(index) do
+    GenServer.call(__MODULE__, {:get_replicated_indices, index})
   end
 
   @spec ring_transform(function(), [term()]) :: none()
@@ -56,6 +72,15 @@ defmodule Ring.Manager do
   def handle_call({:get_preference_list, index, n_val}, _from, ring) do
     successors = CHash.successors(index, n_val, ring.chring)
     {:reply, successors, ring}
+  end
+
+  @impl true
+  def handle_call({:get_replicated_indices, index}, _from, ring) do
+    replication_factor = Application.get_env(:dynamo, :replication)
+    predecessors = CHash.predecessors(index, replication_factor, ring.chring)
+    pred_indices = for {index, _node} <- predecessors, do: index
+
+    {:reply, pred_indices, ring}
   end
 
   @impl true

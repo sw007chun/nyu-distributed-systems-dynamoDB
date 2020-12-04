@@ -27,7 +27,7 @@ defmodule Vnode do
 
   # Replicate operations to following vnodes
   # This can be reused for put/get/delete operation
-  defp replicate_task(key, value, my_index, num_replication, num_write) do
+  defp replicate_task(key, value, context, my_index, num_replication, num_write) do
     pref_list = Ring.Manager.get_preference_list(my_index, num_replication - 1)
     pref_indices = MapSet.new(for {index, _node} <- pref_list, do: index)
     repair_indices = MapSet.new()
@@ -46,7 +46,7 @@ defmodule Vnode do
     # send asynchronous replication task to other vnodes
     for {index, node} <- pref_list do
       {:ok, replicate_task_pid} = {Dynamo.TaskSupervisor, node}
-      |> Task.Supervisor.start_child(Vnode.Master, :async_task, [index, {:repl, task.pid, my_index, key, value}])
+      |> Task.Supervisor.start_child(Vnode.Master, :async_task, [index, {:repl, task.pid, my_index, key, value, context}])
       Logger.info("Replicate Task: #{inspect(replicate_task_pid)}")
     end
 
@@ -100,13 +100,13 @@ defmodule Vnode do
   Callback for put replication to vnodes.
   """
   @impl true
-  def handle_cast({:repl, sender, index, key, value}, state) do
+  def handle_cast({:repl, sender, index, key, value, context}, state) do
     Logger.info("replicating #{key}: #{value} to #{state.partition}")
 
     {_, new_data} =
       state.data
       |> Map.get_and_update(index, fn index_store ->
-        {nil, Map.put(index_store, key, value)}
+        {nil, Map.put(index_store, key, {value, context})}
       end)
 
     send(sender, {:ok, key, value, state.partition})
@@ -122,14 +122,18 @@ defmodule Vnode do
   def handle_call({:put, key, value}, _from, state) do
     Logger.info("put #{key}: #{value}")
 
+    key_value_map = Map.get(state.data, state.partition, %{})
+    {_, context} = Map.get(key_value_map, key, {nil, %{}})
+    context = VClock.increment(Node.self(), context)
+    IO.puts "#{inspect(context)}"
     # store key/value to my parition's key/value store
     {_, new_data} =
       state.data
       |> Map.get_and_update(state.partition, fn index_store ->
-        {nil, Map.put(index_store, key, value)}
+        {nil, Map.put(index_store, key, {value, context})}
       end)
 
-    replicate_task(key, value, state.partition, 3, 2)
+    replicate_task(key, value, context, state.partition, 3, 2)
     {:reply, :ok, %{state | data: new_data}}
   end
 

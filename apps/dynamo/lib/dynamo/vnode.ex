@@ -56,6 +56,30 @@ defmodule Vnode do
     # wait for other return for some time and do read repairs.
   end
 
+  defp get_replica_task(key, value, context, my_index, state, num_replication, num_read) do
+    pref_list = Ring.Manager.get_preference_list(my_index, num_replication - 1)
+    current_read = 1
+
+    # spawn a asynchronous task for receiving the ack from replicating vnodes
+    task =
+      Dynamo.TaskSupervisor
+      |> Task.Supervisor.async(
+        fn ->
+          wait_read_response(key, value, my_index, context, state, current_read, num_read)
+        end)
+
+    Logger.info("Receiver Task: #{inspect(task)}")
+
+    # send asynchronous replication task to other vnodes
+    for {index, node} <- pref_list do
+      {:ok, replicate_task_pid} = {Dynamo.TaskSupervisor, node}
+      |> Task.Supervisor.start_child(Vnode.Master, :async_task, [index, {:getrepl, task.pid, my_index, key}])
+      Logger.info("Replicate Task: #{inspect(replicate_task_pid)}")
+    end
+    {value, state} = Task.await(task)
+    {value, state}
+  end
+
   # this is for spawning async task for getting acks from other vnodes
   defp wait_write_response(key, value, pref_indices, repair_indices, current_write, num_write) do
     if current_write < num_write do
@@ -78,6 +102,35 @@ defmodule Vnode do
       end
     else
       {pref_indices, repair_indices}
+    end
+  end
+
+  defp wait_read_response(key, value, index, context, state, current_read, num_read) do
+    if current_read < num_read do
+      receive do
+        {:ok, ^key, {other_value, other_context}, other_index} ->
+          cond do
+            VClock.compare_vclocks(context, other_context) == :after ->
+              Logger.info("vclock received. Result of comparison: After")
+              # Need to send a put request to the node behind
+              wait_read_response(key, value, index, context, state, current_read+1, num_read)
+            VClock.compare_vclocks(context, other_context) == :before ->
+              Logger.info("vclock received. Result of comparison: Before")
+              index_map = Map.get(state.data, key, %{})
+              index_map = Map.put(index_map, key, {other_value, other_context})
+              state = %{state | data: index_map}
+              wait_read_response(key, other_value, index, other_context, state, current_read+1, num_read)
+            VClock.compare_vclocks(context, other_context) == :equal ->
+              Logger.info("vclock received. Result of comparison: Equal")
+              wait_read_response(key, value, index, context, state, current_read+1, num_read)
+            VClock.compare_vclocks(context, other_context) == :concurrent ->
+              Logger.info("vclock received. Result of comparison: Concurrent")
+              # Need to send all responses as we have divergent branches
+              wait_read_response(key, value, index, context, state, current_read+1, num_read)
+          end
+      end
+    else
+      {value, state}
     end
   end
 
@@ -113,6 +166,20 @@ defmodule Vnode do
     {:noreply, %{state | data: new_data}}
   end
 
+  @doc """
+  Callback for get values from replicas
+  """
+  @impl true
+  def handle_cast({:getrepl, sender, index, key}, state) do
+    Logger.info("returning #{key} value stored in replica")
+
+    index_map = Map.get(state.data, index, %{})
+    value = Map.get(index_map, key, :key_not_found)
+
+    send(sender, {:ok, key, value, state.partition})
+    {:noreply, state}
+  end
+
   @impl true
   def handle_call(:ping, _from, state) do
     {:reply, {:pong, state.partition}, state}
@@ -141,10 +208,13 @@ defmodule Vnode do
   def handle_call({:get, key}, _from, state) do
     Logger.info("get #{key}")
     # TODO : Check R get values from other vnodes
-    value =
+    {value, context} =
       state.data
       |> Map.get(state.partition)
       |> Map.get(key, :key_not_found)
+
+    Logger.info("Waiting for R replies")
+    {value, state} = get_replica_task(key, value, context, state.partition, state, 3, 2)
     {:reply, value, state}
   end
 

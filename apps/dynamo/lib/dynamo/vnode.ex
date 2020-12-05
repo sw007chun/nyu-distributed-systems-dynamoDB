@@ -116,8 +116,11 @@ defmodule Vnode do
               wait_read_response(key, value, index, context, state, current_read+1, num_read)
             VClock.compare_vclocks(context, other_context) == :before ->
               Logger.info("vclock received. Result of comparison: Before")
-              index_map = Map.get(state.data, key, %{})
-              index_map = Map.put(index_map, key, {other_value, other_context})
+              {_, index_map} =
+                state.data
+                |> Map.get_and_update(index, fn index_store ->
+                  {nil, Map.put(index_store, key, {other_value, other_context})}
+                end)
               state = %{state | data: index_map}
               wait_read_response(key, other_value, index, other_context, state, current_read+1, num_read)
             VClock.compare_vclocks(context, other_context) == :equal ->
@@ -173,8 +176,10 @@ defmodule Vnode do
   def handle_cast({:getrepl, sender, index, key}, state) do
     Logger.info("returning #{key} value stored in replica")
 
-    index_map = Map.get(state.data, index, %{})
-    value = Map.get(index_map, key, :key_not_found)
+    value =
+      state.data
+      |> Map.get(index, %{})
+      |> Map.get(key, :key_not_found)
 
     send(sender, {:ok, key, value, state.partition})
     {:noreply, state}

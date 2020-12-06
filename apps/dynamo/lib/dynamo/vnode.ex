@@ -108,11 +108,11 @@ defmodule Vnode do
   defp wait_read_response(key, value, index, context, state, current_read, num_read) do
     if current_read < num_read do
       receive do
-        {:ok, ^key, {other_value, other_context}, other_index} ->
+        {:ok, ^key, {other_value, other_context}, other_index, sender} ->
           cond do
             VClock.compare_vclocks(context, other_context) == :after ->
               Logger.info("vclock received. Result of comparison: After")
-              # Need to send a put request to the node behind
+              GenServer.cast({Vnode.Master, sender}, {:command, Node.self, other_index, {:update_repl, key, value, index, context}})
               wait_read_response(key, value, index, context, state, current_read+1, num_read)
             VClock.compare_vclocks(context, other_context) == :before ->
               Logger.info("vclock received. Result of comparison: Before")
@@ -128,9 +128,26 @@ defmodule Vnode do
               wait_read_response(key, value, index, context, state, current_read+1, num_read)
             VClock.compare_vclocks(context, other_context) == :concurrent ->
               Logger.info("vclock received. Result of comparison: Concurrent")
-              # Need to send all responses as we have divergent branches
-              wait_read_response(key, value, index, context, state, current_read+1, num_read)
+              # Merging concurrent vclocks into one
+              # Incrementing the vclock and adding all concurrent values to a list
+              # Sending the update replica command back to the node
+              new_context = VClock.merge_vclocks(context, other_context)
+              new_context = VClock.increment(Node.self(), new_context)
+              new_value = if is_list(value) do value else [value] end
+              new_value = if is_list(other_value) do new_value ++ other_value else new_value ++ [other_value] end
+              {_, index_map} =
+                state.data
+                |> Map.get_and_update(index, fn index_store ->
+                  {nil, Map.put(index_store, key, {new_value, new_context})}
+                end)
+              state = %{state | data: index_map}
+              GenServer.cast({Vnode.Master, sender}, {:command, Node.self, other_index, {:update_repl, key, new_value, index, new_context}})
+              wait_read_response(key, new_value, index, new_context, state, current_read+1, num_read)
           end
+        after
+          10_000 ->
+            Logger.info("Timed out while waiting for R replies")
+            {value, state}
       end
     else
       {value, state}
@@ -181,8 +198,19 @@ defmodule Vnode do
       |> Map.get(index, %{})
       |> Map.get(key, :key_not_found)
 
-    send(sender, {:ok, key, value, state.partition})
+    send(sender, {:ok, key, value, state.partition, Node.self()})
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:update_repl, key, value, index, context}, state) do
+    {_, new_data} =
+      state.data
+      |> Map.get_and_update(index, fn index_store ->
+        {nil, Map.put(index_store, key, {value, context})}
+      end)
+
+    {:noreply, %{state | data: new_data}}
   end
 
   @impl true

@@ -112,7 +112,7 @@ defmodule Vnode do
           cond do
             VClock.compare_vclocks(context, other_context) == :after ->
               Logger.info("vclock received. Result of comparison: After")
-              GenServer.cast({Vnode.Master, sender}, {:repl_command, Node.self, {:update_repl, key, value, index, context}})
+              GenServer.cast({Vnode.Master, sender}, {:command, Node.self, other_index, {:update_repl, key, value, index, context}})
               wait_read_response(key, value, index, context, state, current_read+1, num_read)
             VClock.compare_vclocks(context, other_context) == :before ->
               Logger.info("vclock received. Result of comparison: Before")

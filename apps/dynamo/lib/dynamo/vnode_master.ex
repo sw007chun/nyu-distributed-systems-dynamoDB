@@ -45,13 +45,6 @@ defmodule Vnode.Master do
     {:noreply, state}
   end
 
-  @impl true
-  def handle_cast({:repl_command, sender, msg}, state) do
-    Logger.info("Received command #{inspect(msg)} from #{sender}")
-    GenServer.cast(Node.self(), msg)
-    {:noreply, state}
-  end
-
   # Find pid of vnode responsible for hat index and send command.
   @impl true
   def handle_call({:sync_command, sender, index, msg}, _from, state) do

@@ -35,7 +35,7 @@ defmodule MerkleTree do
   @doc """
   Destroy the merkle tree file in the disk
   """
-  @spec destroy(%MerkleTree{}) :: :ok | {:error, posix()}
+  @spec destroy(%MerkleTree{}) :: :ok | {:error, :file.posix()}
   def destroy(state) do
     File.rm(state.path)
   end

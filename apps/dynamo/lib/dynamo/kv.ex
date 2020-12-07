@@ -37,4 +37,13 @@ defmodule KV do
     [index_node] = preflist
     Vnode.Master.sync_command(index_node, command)
   end
+
+  # Testing function
+  def put_single(key, value, index) do
+    <<index_as_int::160>> = CHash.key_of(key)
+    {:ok, ring} = Ring.Manager.get_my_ring()
+    index_as_int = CHash.next_index(index_as_int, ring.chring)
+    Vnode.Master.sync_command({index, Node.self()}, {:put_single, key, value, index_as_int})
+  end
+  # Remove after done
 end

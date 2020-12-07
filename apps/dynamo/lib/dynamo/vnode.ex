@@ -112,10 +112,12 @@ defmodule Vnode do
           cond do
             VClock.compare_vclocks(context, other_context) == :after ->
               Logger.info("vclock received. Result of comparison: After")
+              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               GenServer.cast({Vnode.Master, sender}, {:command, Node.self, other_index, {:update_repl, key, value, index, context}})
               wait_read_response(key, value, index, context, state, current_read+1, num_read)
             VClock.compare_vclocks(context, other_context) == :before ->
               Logger.info("vclock received. Result of comparison: Before")
+              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               {_, index_map} =
                 state.data
                 |> Map.get_and_update(index, fn index_store ->
@@ -125,9 +127,11 @@ defmodule Vnode do
               wait_read_response(key, other_value, index, other_context, state, current_read+1, num_read)
             VClock.compare_vclocks(context, other_context) == :equal ->
               Logger.info("vclock received. Result of comparison: Equal")
+              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               wait_read_response(key, value, index, context, state, current_read+1, num_read)
             VClock.compare_vclocks(context, other_context) == :concurrent ->
               Logger.info("vclock received. Result of comparison: Concurrent")
+              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # Merging concurrent vclocks into one
               # Incrementing the vclock and adding all concurrent values to a list
               # Sending the update replica command back to the node
@@ -236,6 +240,22 @@ defmodule Vnode do
     replicate_task(key, value, context, state.partition, 3, 2)
     {:reply, :ok, %{state | data: new_data}}
   end
+
+  # Function for testing
+  @impl true
+  def handle_call({:put_single, key, value, index}, _from, state) do
+    Logger.info("Putting single #{key}")
+
+    key_value_map = Map.get(state.data, index, %{})
+    {_, context} = Map.get(key_value_map, key, {nil, %{}})
+    context = VClock.increment(Node.self(), context)
+    IO.puts "New context: #{inspect(context)}"
+    key_value_map = Map.put(key_value_map, key, {value, context})
+    new_data = Map.put(state.data, index, key_value_map)
+
+    {:reply, :ok, %{state | data: new_data}}
+  end
+  # Remove after done
 
   @impl true
   def handle_call({:get, key}, _from, state) do

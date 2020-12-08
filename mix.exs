@@ -39,7 +39,8 @@ defmodule DynamoProject.MixProject do
     [
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.22", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.22", only: :dev, runtime: false},
+      {:local_cluster, "~> 1.2", only: [:test]}
     ]
   end
 end

@@ -7,6 +7,8 @@ defmodule Vnode do
   require Logger
 
   @type index_as_int() :: integer()
+  # random delay for receiving put, get quorum response
+  @mean 10
 
   @doc """
   Start Vnode for partition starting at index.
@@ -21,178 +23,6 @@ defmodule Vnode do
     GenServer.start_link(__MODULE__, index)
   end
 
-  def replicate(key, value) do
-    GenServer.call(__MODULE__, {:put_repl, key, value})
-  end
-
-  # Replicate operations to following vnodes
-  # This can be reused for put/get/delete operation
-  defp replicate_put(key, value, context, my_index, num_replication, num_write) do
-    pref_list = Ring.Manager.get_preference_list(my_index, num_replication - 1)
-    pref_indices = MapSet.new(for {index, _node} <- pref_list, do: index)
-    repair_indices = MapSet.new()
-
-    # spawn a asynchronous task for receiving the ack from replicating vnodes
-    task =
-      Dynamo.TaskSupervisor
-      |> Task.Supervisor.async(fn ->
-        wait_write_response(1, num_write)
-      end)
-
-    # send asynchronous replication task to other vnodes
-    for {index, node} <- pref_list do
-      {:ok, replicate_task_pid} =
-        {Dynamo.TaskSupervisor, node}
-        |> Task.Supervisor.start_child(Vnode.Master, :async_task, [
-          index,
-          {:put_repl, task.pid, my_index, key, value, context}
-        ])
-    end
-
-    Task.await(task)
-  end
-
-  defp replicate_get(key, value, context, my_index, state, num_replication, num_read) do
-    pref_list = Ring.Manager.get_preference_list(my_index, num_replication - 1)
-    current_read = 1
-
-    # spawn a asynchronous task for receiving the ack from replicating vnodes
-    task =
-      Dynamo.TaskSupervisor
-      |> Task.Supervisor.async(fn ->
-        wait_read_response(key, value, my_index, context, state, current_read, num_read)
-      end)
-
-    # send asynchronous replication task to other vnodes
-    for {index, node} <- pref_list do
-      {:ok, replicate_task_pid} =
-        {Dynamo.TaskSupervisor, node}
-        |> Task.Supervisor.start_child(Vnode.Master, :async_task, [
-          index,
-          {:get_repl, task.pid, my_index, key}
-        ])
-    end
-
-    Task.await(task)
-  end
-
-  # this is for spawning async task for getting acks from other vnodes
-  defp wait_write_response(current_write, num_write) do
-    if current_write < num_write do
-      receive do
-        # We need to add vclock or nonce for checking
-        :ok ->
-          wait_write_response(current_write + 1, num_write)
-
-        other ->
-          Logger.info("#{inspect(other)}")
-          wait_write_response(current_write, num_write)
-      end
-    else
-      :ok
-    end
-  end
-
-  defp wait_read_response(key, value, index, context, state, current_read, num_read) do
-    if current_read < num_read do
-      receive do
-        {:ok, ^key, {other_value, other_context}, other_index, sender} ->
-          case VClock.compare_vclocks(context, other_context) do
-            :after ->
-              Logger.info("vclock received. Result of comparison: After")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
-
-              GenServer.cast(
-                {Vnode.Master, sender},
-                {:command, Node.self(), other_index, {:update_repl, key, value, index, context}}
-              )
-
-              wait_read_response(key, value, index, context, state, current_read + 1, num_read)
-
-            :before ->
-              Logger.info("vclock received. Result of comparison: Before")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
-
-              {_, index_map} =
-                state.data
-                |> Map.get_and_update(index, fn index_store ->
-                  {nil, Map.put(index_store, key, {other_value, other_context})}
-                end)
-
-              state = %{state | data: index_map}
-
-              wait_read_response(
-                key,
-                other_value,
-                index,
-                other_context,
-                state,
-                current_read + 1,
-                num_read
-              )
-
-            :equal when value == other_value ->
-              Logger.info("vclock received. Result of comparison: Equal")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
-              wait_read_response(key, value, index, context, state, current_read + 1, num_read)
-
-            _ ->
-              Logger.info("vclock received. Result of comparison: Concurrent")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
-              # Merging concurrent vclocks into one
-              # Incrementing the vclock and adding all concurrent values to a list
-              # Sending the update replica command back to the node
-              new_context = VClock.merge_vclocks(context, other_context)
-              new_context = VClock.increment(Node.self(), new_context)
-
-              new_value =
-                if is_list(value) do
-                  value
-                else
-                  [value]
-                end
-
-              new_value =
-                if is_list(other_value) do
-                  new_value ++ other_value
-                else
-                  new_value ++ [other_value]
-                end
-
-              {_, index_map} =
-                state.data
-                |> Map.get_and_update(index, fn index_store ->
-                  {nil, Map.put(index_store, key, {new_value, new_context})}
-                end)
-
-              state = %{state | data: index_map}
-
-              GenServer.cast(
-                {Vnode.Master, sender},
-                {:command, Node.self(), other_index,
-                 {:update_repl, key, new_value, index, new_context}}
-              )
-
-              wait_read_response(
-                key,
-                new_value,
-                index,
-                new_context,
-                state,
-                current_read + 1,
-                num_read
-              )
-          end
-      after
-        10_000 ->
-          Logger.info("Timed out while waiting for R replies")
-          {value, state}
-      end
-    else
-      {value, state}
-    end
-  end
-
   # Vnode keeps state partition, the index of partition it's in charge
   # and data, a key/value stores of indicies.
   # data is a map of %{index => %{key => value}}
@@ -201,8 +31,10 @@ defmodule Vnode do
     # get indices of previous (n-1) vnodes for replication
     replicated_indices = Ring.Manager.get_replicated_indices(partition)
 
+    # map for each replicated partitions
     data =
-      Ring.Manager.get_replicated_indices(partition)
+      partition
+      |> Ring.Manager.get_replicated_indices
       |> Map.new(fn index -> {index, %{}} end)
 
     replication = Application.get_env(:dynamo, :replication)
@@ -215,31 +47,37 @@ defmodule Vnode do
   Callback for put replication to vnodes.
   """
   @impl true
-  def handle_cast({:put_repl, sender, index, key, value, context}, state) do
-    Logger.info("replicating #{key}: #{value} to #{state.partition}")
+  def handle_cast({:put_repl, sender, index, key, value, context, nonce}, state) do
+    Logger.info("#{Node.self()} replicating #{key}: #{value} to #{state.partition}")
 
-    {_, new_data} =
-      state.data
-      |> Map.get_and_update(index, fn index_store ->
-        {nil, Map.put(index_store, key, {value, context})}
-      end)
+    # {_, new_data} =
+    #   state.data
+    #   |> Map.get_and_update(index, fn index_store ->
+    #     {nil, Map.put(index_store, key, {value, context})}
+    #   end)
 
-    send(sender, :ok)
-    {:noreply, %{state | data: new_data}}
+    state = put_in(state, [:data, index, key], {value, context})
+
+    Process.sleep(random_delay(@mean))
+    send(sender, {:ok, nonce})
+    {:noreply, state}
   end
 
   @doc """
   Callback for get values from replicas
   """
   @impl true
-  def handle_cast({:get_repl, sender, index, key}, state) do
-    Logger.info("returning #{key} value stored in replica")
+  def handle_cast({:get_repl, sender, index, key, delay}, state) do
+    Logger.info("Returning #{key} value stored in replica")
 
     value =
       state.data
       |> Map.get(index, %{})
       |> Map.get(key, :key_not_found)
 
+    if delay do
+      Process.sleep(random_delay(@mean))
+    end
     send(sender, {:ok, key, value, state.partition, Node.self()})
     {:noreply, state}
   end
@@ -262,21 +100,27 @@ defmodule Vnode do
 
   @impl true
   def handle_call({:put, key, value}, _from, state) do
-    Logger.info("put #{key}: #{value} to #{state.partition}")
+    Logger.info("#{Node.self()} put #{key}: #{value} to #{state.partition}")
 
-    key_value_map = Map.get(state.data, state.partition, %{})
-    {_, context} = Map.get(key_value_map, key, {nil, %{}})
-    context = VClock.increment(Node.self(), context)
-    IO.puts("#{inspect(context)}")
-    # store key/value to my parition's key/value store
-    {_, new_data} =
+    {_, context} =
       state.data
-      |> Map.get_and_update(state.partition, fn index_store ->
-        {nil, Map.put(index_store, key, {value, context})}
-      end)
+      |> Map.get(state.partition, %{})
+      |> Map.get(key, {nil, %{}})
+    context = VClock.increment(Node.self(), context)
 
-    replicate_put(key, value, context, state.partition, state.replication, state.read)
-    {:reply, :ok, %{state | data: new_data}}
+    # store key/value to my parition's key/value store
+    # {_, new_data} =
+    #   state.data
+    #   |> Map.get_and_update(state.partition,
+    #   fn index_store ->
+    #     {nil, Map.put(index_store, key, {value, context})}
+    #   end)
+
+    state = put_in(state, [:data, state.partition, key], {value, context})
+
+    Vnode.Replication.replicate_put(key, value, context, state.partition, state.replication, state.read)
+    {:reply, :ok, state}
+    # {:reply, :ok, %{state | data: new_data}}
   end
 
   # Function for testing
@@ -303,9 +147,8 @@ defmodule Vnode do
   # Remove after done
 
   @impl true
-  def handle_call({:get, key}, _from, state) do
-    Logger.info("get #{key}")
-    # TODO : Check R get values from other vnodes
+  def handle_call({:get, key, get_all}, _from, state) do
+    Logger.info("#{Node.self()} get #{key}")
     {value, context} =
       state.data
       |> Map.get(state.partition)
@@ -314,7 +157,13 @@ defmodule Vnode do
     Logger.info("Waiting for R replies")
 
     {value, state} =
-      replicate_get(key, value, context, state.partition, state, state.replication, state.read)
+      if get_all do
+        result = Vnode.Replication.get_all_read(key, value, context, state.partition, state, state.replication, state.replication)
+        IO.puts result
+        {value, state}
+      else
+        Vnode.Replication.replicate_get(key, value, context, state.partition, state, state.replication, state.read)
+      end
 
     {:reply, value, state}
   end
@@ -330,5 +179,16 @@ defmodule Vnode do
   @impl true
   def handle_call(:get_my_data, _from, state) do
     {:reply, state.data, state}
+  end
+
+  @spec random_delay(number()) :: number()
+  defp random_delay(mean) do
+    if mean > 0 do
+      Statistics.Distributions.Exponential.rand(1.0 / mean)
+      |> Float.round()
+      |> trunc
+    else
+      0
+    end
   end
 end

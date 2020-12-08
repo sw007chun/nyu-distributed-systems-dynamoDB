@@ -12,14 +12,9 @@ defmodule Vnode.Master do
     GenServer.start_link(__MODULE__, :ok, opts)
   end
 
-  def async_task(index, msg) do
-    Logger.info("Received async command #{inspect(msg)}")
-    pid = Vnode.Manager.get_vnode_pid(index)
-    result = GenServer.cast(pid, msg)
-  end
-
   @spec command(index_as_int(), term()) :: term()
   def command({index, node}, msg) do
+    Logger.info("#{Node.self()} Received async command #{inspect(msg)}")
     GenServer.cast({__MODULE__, node}, {:command, Node.self(), index, msg})
   end
 
@@ -48,7 +43,7 @@ defmodule Vnode.Master do
   # Find pid of vnode responsible for hat index and send command.
   @impl true
   def handle_call({:sync_command, sender, index, msg}, _from, state) do
-    Logger.info("Received sync command #{inspect(msg)} from #{sender}")
+    Logger.info("#{Node.self()} Received sync command #{inspect(msg)} from #{sender}")
     pid = Vnode.Manager.get_vnode_pid(index)
     result = GenServer.call(pid, msg)
     {:reply, result, state}

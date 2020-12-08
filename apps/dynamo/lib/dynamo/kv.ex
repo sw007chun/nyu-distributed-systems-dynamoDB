@@ -4,7 +4,7 @@ defmodule KV do
   end
 
   def ring_status do
-    {:ok, ring} = Ring.Manager.get_my_ring
+    {:ok, ring} = Ring.Manager.get_my_ring()
     Ring.print_status(ring)
   end
 
@@ -39,11 +39,15 @@ defmodule KV do
   end
 
   # Testing function
-  def put_single(key, value, index) do
-    <<index_as_int::160>> = CHash.key_of(key)
-    {:ok, ring} = Ring.Manager.get_my_ring()
-    index_as_int = CHash.next_index(index_as_int, ring.chring)
-    Vnode.Master.sync_command({index, Node.self()}, {:put_single, key, value, index_as_int})
+  def put_single(key, value, repl_index) do
+    [{key_index, _}] = CHash.key_of(key) |> Ring.Manager.get_preference_list(1)
+    # {:ok, ring} = Ring.Manager.get_my_ring()
+    # index_as_int = CHash.next_index(index_as_int, ring.chring)
+    preflist = Ring.Manager.get_preference_list(repl_index - 1, 1)
+    [index_node] = preflist
+    Vnode.Master.sync_command(index_node, {:put_single, key, value, key_index})
+    # Vnode.Master.sync_command({index, Node.self()}, {:put_single, key, value, index_as_int})
   end
+
   # Remove after done
 end

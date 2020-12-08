@@ -33,7 +33,7 @@ defmodule Vnode.Master do
 
   @impl true
   def init(:ok) do
-    Vnode.Manager.start_ring
+    Vnode.Manager.start_ring()
     {:ok, []}
   end
 

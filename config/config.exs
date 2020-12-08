@@ -19,4 +19,6 @@ import Config
 
 config :dynamo,
   ring_size: 8,
-  replication: 3
+  replication: 3,
+  R: 2,
+  W: 2

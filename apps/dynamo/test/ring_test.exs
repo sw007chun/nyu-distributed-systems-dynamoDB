@@ -2,8 +2,8 @@ defmodule RingTest do
   use ExUnit.Case, async: true
 
   test "sequence" do
-    index1 = 365375409332725729550921208179070754913983135744
-    index2 = 730750818665451459101842416358141509827966271488
+    index1 = 365_375_409_332_725_729_550_921_208_179_070_754_913_983_135_744
+    index2 = 730_750_818_665_451_459_101_842_416_358_141_509_827_966_271_488
     ring_a = Ring.new_ring(4, :a)
     ring_b1 = %{ring_a | node_name: :b}
     ring_b2 = Ring.transfer_node(index1, :b, ring_b1)

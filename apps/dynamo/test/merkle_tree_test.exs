@@ -23,8 +23,8 @@ defmodule MerkleTreeTest do
     keys =
       [:hello, :distributed, :amazon]
       |> Enum.map(&:erlang.phash2/1)
-      |> Enum.map(&(rem(&1, a0.segments)))
-      |> Enum.sort
+      |> Enum.map(&rem(&1, a0.segments))
+      |> Enum.sort()
 
     diff = MerkleTree.compare_trees({a4.tree, b7.tree})
     assert keys == diff
@@ -32,7 +32,8 @@ defmodule MerkleTreeTest do
     a_segments = MerkleTree.get_segments(a4.path, diff)
     b_segments = MerkleTree.get_segments(b7.path, diff)
 
-    assert [different: :hello, missing: :amazon, other_missing: :distributed] == MerkleTree.compare_segments(a_segments, b_segments)
+    assert [different: :hello, missing: :amazon, other_missing: :distributed] ==
+             MerkleTree.compare_segments(a_segments, b_segments)
 
     MerkleTree.destroy(a0)
     MerkleTree.destroy(b0)

@@ -36,13 +36,15 @@ defmodule Ring do
 
   @spec new_ring(non_neg_integer(), node_name()) :: %Ring{}
   def new_ring(ring_size, node_name) do
-    vclock = VClock.increment(node_name, VClock.new_clock)
-    %Ring{node_name: node_name,
-          vclock: vclock,
-          chring: CHash.new_ring(ring_size, node_name),
-          members: %{node_name => {:valid, vclock}},
-          claimant: node_name
-        }
+    vclock = VClock.increment(node_name, VClock.new_clock())
+
+    %Ring{
+      node_name: node_name,
+      vclock: vclock,
+      chring: CHash.new_ring(ring_size, node_name),
+      members: %{node_name => {:valid, vclock}},
+      claimant: node_name
+    }
   end
 
   @spec ring_size(ring()) :: non_neg_integer()
@@ -86,11 +88,13 @@ defmodule Ring do
 
     new_members =
       ring.members
-      |> Map.update(member,
-          default_clock,
-          fn {_status, vclock} ->
-            {status, VClock.increment(node, vclock)}
-          end)
+      |> Map.update(
+        member,
+        default_clock,
+        fn {_status, vclock} ->
+          {status, VClock.increment(node, vclock)}
+        end
+      )
 
     %{ring | vclock: my_vclock, members: new_members}
   end
@@ -183,31 +187,39 @@ defmodule Ring do
     node_initial_pair = Enum.zip(nodes, initials)
     split_size = 4
 
-    IO.puts "==================================== Nodes ===================================="
+    header = "==================================== Nodes ===================================="
 
-    for {node, initial} <- node_initial_pair do
-      num_vnodes = node_entries
-        |> Enum.reduce(0, fn {_, index_owner}, acc ->
-          if index_owner === node, do: acc + 1, else: acc end)
+    node_info =
+      for {node, initial} <- node_initial_pair do
+        num_vnodes =
+          node_entries
+          |> Enum.reduce(0, fn {_, index_owner}, acc ->
+            if index_owner === node, do: acc + 1, else: acc
+          end)
 
-      ring_percentage = num_vnodes / ring_size * 100
-      IO.puts "Node #{initial}: #{num_vnodes} (#{Float.round(ring_percentage, 1)}%) #{node}"
-    end
+        ring_percentage = num_vnodes / ring_size * 100
+        "Node #{initial}: #{num_vnodes} (#{Float.round(ring_percentage, 1)}%) #{node}"
+      end
 
-    IO.puts "==================================== Ring ====================================="
+    node_info = [header | node_info]
 
-    node_entries
-    |> Enum.reduce(1, fn {_, node}, acc ->
+    header = "==================================== Ring ====================================="
+
+    node_distribution =
+      for {{_, node}, i} <- Enum.with_index(node_entries, 1) do
         initial = Keyword.fetch!(node_initial_pair, node)
-        if rem(acc, split_size) == 0 do
-          IO.write initial <> "|"
-        else
-          IO.write initial
-        end
-        acc + 1
-      end)
 
-    IO.puts ""
+        if rem(i, split_size) == 0 do
+          initial <> "|"
+        else
+          initial
+        end
+      end
+
+    node_distribution = [header | [Enum.join(node_distribution, "")]]
+
+    (node_info ++ node_distribution)
+    |> Enum.join("\n")
   end
 
   @spec member_status(%Ring{}, node_name()) :: member_status()
@@ -220,6 +232,7 @@ defmodule Ring do
     case Map.get(members, node) do
       {status, _vclock} ->
         status
+
       _ ->
         :invalid
     end
@@ -252,6 +265,7 @@ defmodule Ring do
   @spec random_other_index(ring()) :: index_as_int()
   def random_other_index(ring) do
     my_node = Node.self()
+
     not_owned_node_indices =
       for {index, owner} <- all_index_owners(ring), owner != my_node do
         index
@@ -274,10 +288,13 @@ defmodule Ring do
     case VClock.compare_vclocks(ring1.vclock, ring2.vclock) do
       :before ->
         {:new_ring, %{ring2 | vclock: merged_vclock}}
+
       :after ->
         {:new_ring, %{ring1 | vclock: merged_vclock}}
+
       :equal ->
         {:no_change, ring1}
+
       :concurrent ->
         new_ring = reconcile_divergent(my_node, ring1, ring2)
         {:new_ring, %{new_ring | node_name: my_node}}
@@ -298,18 +315,20 @@ defmodule Ring do
   # Merge two members list using vlocks
   @spec reconcile_members(%Ring{}, %Ring{}) :: members()
   def reconcile_members(ring1, ring2) do
-    Map.merge(ring1.members, ring2.members,
-      fn _k, {status1, vclock1}, {status2, vclock2} ->
-        merged_vclock = VClock.merge_vclocks(vclock1, vclock2)
-        case VClock.compare_vclocks(vclock1, vclock2) do
-          :before ->
-            {status2, merged_vclock}
-          :after ->
-            {status1, merged_vclock}
-          _ ->
-            {merge_status(status1, status2), merged_vclock}
-        end
-      end)
+    Map.merge(ring1.members, ring2.members, fn _k, {status1, vclock1}, {status2, vclock2} ->
+      merged_vclock = VClock.merge_vclocks(vclock1, vclock2)
+
+      case VClock.compare_vclocks(vclock1, vclock2) do
+        :before ->
+          {status2, merged_vclock}
+
+        :after ->
+          {status1, merged_vclock}
+
+        _ ->
+          {merge_status(status1, status2), merged_vclock}
+      end
+    end)
   end
 
   @doc """
@@ -320,6 +339,7 @@ defmodule Ring do
     case CHash.lookup(index, my_ring.chring) do
       ^node ->
         my_ring
+
       _ ->
         my_node = my_ring.node_name
         new_vclock = VClock.increment(my_node, my_ring.vclock)

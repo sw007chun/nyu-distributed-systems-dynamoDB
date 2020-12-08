@@ -32,9 +32,10 @@ defmodule CHash do
     inc = ring_increment(num_partitions)
     # there is a one more partition if num_partitions is odd. Not sure how it's managed for now.
     node_entries =
-      for index_as_int <- :lists.seq(0, @ringtop-1, inc) do
+      for index_as_int <- :lists.seq(0, @ringtop - 1, inc) do
         {index_as_int, seed_node}
       end
+
     %CHash{
       num_partitions: num_partitions,
       node_entries: node_entries
@@ -73,7 +74,7 @@ defmodule CHash do
   @spec members(%CHash{}) :: [chash_node()]
   def members(chash) do
     Enum.uniq(for {_, node} <- chash.node_entries, do: node)
-    |> Enum.sort
+    |> Enum.sort()
   end
 
   @doc """
@@ -111,7 +112,6 @@ defmodule CHash do
     length(chash.node_entries)
   end
 
-
   @doc """
   Return previous n node entries.
   This is used for preference list
@@ -123,8 +123,9 @@ defmodule CHash do
     inc = ring_increment(chash.num_partitions)
     next_partition_index = div(index_as_int, inc) + 1
     {first_n, following} = Enum.split(chash.node_entries, next_partition_index)
-    following ++ first_n
-    |> Enum.reverse
+
+    (following ++ first_n)
+    |> Enum.reverse()
     |> Enum.take(num)
   end
 
@@ -154,6 +155,7 @@ defmodule CHash do
         0,
         {index_as_int, new_node}
       )
+
     %{chash | node_entries: new_node_entries}
   end
 end

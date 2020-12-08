@@ -27,11 +27,11 @@ defmodule Vnode.Manager do
   This is part of initialization process. It starts all the vnode.
   """
   def start_ring do
-    {:ok, ring} = Ring.Manager.get_my_ring
+    {:ok, ring} = Ring.Manager.get_my_ring()
     startable_vnodes = Ring.my_indices(ring)
 
     for index <- startable_vnodes do
-       Vnode.start_vnode(index)
+      Vnode.start_vnode(index)
     end
   end
 
@@ -51,6 +51,7 @@ defmodule Vnode.Manager do
           {:ok, new_pid} = DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, index})
           new_table = Map.put(index_table, index, new_pid)
           {new_pid, new_table}
+
         pid ->
           {pid, index_table}
       end

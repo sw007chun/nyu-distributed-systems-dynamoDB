@@ -42,15 +42,18 @@ defmodule Ring.Claimant do
   def handle_joining(node, ring, joining_nodes) do
     # case Ring.claimant(ring) do
     #   ^node ->
-        changed = Enum.empty?(joining_nodes)
-        new_ring =
-          joining_nodes
-          |> Enum.reduce(ring,
-            fn join_node, ring0 ->
-              Ring.set_member(node, ring0, join_node, :valid)
-            end)
+    changed = Enum.empty?(joining_nodes)
 
-        {changed, new_ring}
+    new_ring =
+      joining_nodes
+      |> Enum.reduce(
+        ring,
+        fn join_node, ring0 ->
+          Ring.set_member(node, ring0, join_node, :valid)
+        end
+      )
+
+    {changed, new_ring}
     #   _ ->
     #     {false, ring}
     # end
@@ -58,12 +61,15 @@ defmodule Ring.Claimant do
 
   def handle_remove(node, ring, leaving_nodes) do
     changed = Enum.empty?(leaving_nodes)
+
     new_ring =
-    leaving_nodes
-      |> Enum.reduce(ring,
+      leaving_nodes
+      |> Enum.reduce(
+        ring,
         fn leave_node, ring0 ->
           Ring.set_member(node, ring0, leave_node, :invalid)
-        end)
+        end
+      )
 
     {changed, new_ring}
   end
@@ -79,16 +85,19 @@ defmodule Ring.Claimant do
 
   def rebalance(ring) do
     Ring.claiming_members(ring)
-    |> Enum.reduce(ring,
+    |> Enum.reduce(
+      ring,
       fn node, ring ->
         claim(ring, node)
-      end)
+      end
+    )
   end
 
   def claim(ring, node) do
     case needs_claim(ring, node) do
       true ->
         choose_claim(ring, node)
+
       false ->
         ring
     end
@@ -116,15 +125,16 @@ defmodule Ring.Claimant do
   def choose_claim(ring, node) do
     active_nodes =
       [node | Ring.claiming_members(ring)]
-      |> Enum.uniq
-      |> Enum.sort
+      |> Enum.uniq()
+      |> Enum.sort()
 
     cyclic_distribution(ring, active_nodes)
     |> Enum.reduce(
       ring,
       fn {index, new_owner}, ring0 ->
         Ring.transfer_node(index, new_owner, ring0)
-      end)
+      end
+    )
   end
 
   @doc """
@@ -135,7 +145,7 @@ defmodule Ring.Claimant do
     partition_size = Ring.num_partitions(ring)
     cyclic_nodes = Enum.take(Stream.cycle(nodes), partition_size)
 
-    indices = Ring.all_indices(ring) |> Enum.sort
+    indices = Ring.all_indices(ring) |> Enum.sort()
     Enum.zip(indices, cyclic_nodes)
   end
 
@@ -145,15 +155,17 @@ defmodule Ring.Claimant do
     counter = Map.new(nodes, fn node -> {node, 0} end)
 
     partition_owners
-    |>  Enum.reduce(
-        counter,
-        fn {_index, owner}, counter0 ->
-          case Enum.member?(nodes, owner) do
-            true ->
-              Map.update(counter0, owner, 1, &(&1 + 1))
-            false ->
-              counter0
-          end
-        end)
+    |> Enum.reduce(
+      counter,
+      fn {_index, owner}, counter0 ->
+        case Enum.member?(nodes, owner) do
+          true ->
+            Map.update(counter0, owner, 1, &(&1 + 1))
+
+          false ->
+            counter0
+        end
+      end
+    )
   end
 end

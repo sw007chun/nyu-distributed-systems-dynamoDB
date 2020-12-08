@@ -14,23 +14,18 @@ defmodule DynamoProject.MixProject do
         foo: [
           version: "0.0.1",
           applications: [dynamo: :permanent],
-          cookie: "weknoweachother",
+          cookie: "weknoweachother"
         ],
         bar: [
           version: "0.0.1",
           applications: [dynamo: :permanent],
-          cookie: "weknoweachother",
+          cookie: "weknoweachother"
         ],
         baz: [
           version: "0.0.1",
           applications: [dynamo: :permanent],
-          cookie: "weknoweachother",
-        ],
-        swchun: [
-          version: "0.0.1",
-          applications: [dynamo: :permanent],
-          cookie: "weknoweachother",
-        ],
+          cookie: "weknoweachother"
+        ]
       ]
     ]
   end

@@ -1,5 +1,4 @@
 defmodule MerkleTree do
-
   @num_segments 4
   @width 2
   @num_level 2
@@ -21,9 +20,10 @@ defmodule MerkleTree do
   def new(index) do
     # create directory and a file to store
     if not File.exists?(@path), do: File.mkdir(@path)
+
     file_name =
       index
-      |> Integer.to_string
+      |> Integer.to_string()
       |> String.slice(0, 6)
 
     file_path = Path.join(@path, file_name)
@@ -69,7 +69,7 @@ defmodule MerkleTree do
   end
 
   # Execute all the commands in the write_buffer and save it in the disk
-  @spec flush_buffer(%MerkleTree{}) :: {%{integer() => %{}},%MerkleTree{}}
+  @spec flush_buffer(%MerkleTree{}) :: {%{integer() => %{}}, %MerkleTree{}}
   defp flush_buffer(state) do
     if not File.exists?(state.path), do: File.touch(state.path)
 
@@ -77,8 +77,10 @@ defmodule MerkleTree do
       case File.read(state.path) do
         {:ok, ""} ->
           Enum.reduce(0..(state.segments - 1), %{}, fn x, acc -> Map.put(acc, x, %{}) end)
+
         {:ok, key_map} ->
           :erlang.binary_to_term(key_map)
+
         {:error, reason} ->
           {:error, reason}
       end
@@ -92,13 +94,14 @@ defmodule MerkleTree do
           case command do
             {:put, segment, key, value_hash} ->
               put_in(data0, [segment, key], value_hash)
+
             {:delete, segment, key} ->
               {_, data0} = pop_in(data0, [segment, key])
               data0
           end
         end
       )
-      |> Map.new
+      |> Map.new()
 
     File.write(state.path, :erlang.term_to_binary(new_data))
     {new_data, %{state | write_buffer: []}}
@@ -113,27 +116,25 @@ defmodule MerkleTree do
 
     hash_list =
       segments
-        |> Enum.map(
-        fn {_k, v} ->
-          v |> Enum.map(&:erlang.term_to_binary/1) |> hash
-        end)
+      |> Enum.map(fn {_k, v} ->
+        v |> Enum.map(&:erlang.term_to_binary/1) |> hash
+      end)
 
     # convert to tree node(value, children)
     tree =
       hash_list
-      |> Enum.with_index
-      |> Enum.map(
-        fn {hash, segment_num} ->
-          %{hash: hash, children: [segment_num]}
-        end)
-
+      |> Enum.with_index()
+      |> Enum.map(fn {hash, segment_num} ->
+        %{hash: hash, children: [segment_num]}
+      end)
 
     tree = make_tree(state.levels - 1, tree, hash_list, state.width)
     %{state2 | tree: tree}
   end
 
   # Build the merkle tree from bottom up
-  @spec make_tree(integer(), %{{integer(), integer()} => binary()}, [binary()], %MerkleTree{}) :: binary()
+  @spec make_tree(integer(), %{{integer(), integer()} => binary()}, [binary()], %MerkleTree{}) ::
+          binary()
   defp make_tree(-1, [tree], [_top_hash], _width) do
     tree
   end
@@ -163,8 +164,10 @@ defmodule MerkleTree do
     |> Enum.reduce(
       context,
       fn binary, context0 ->
-        :crypto.hash_update(context0, binary) end)
-    |> :crypto.hash_final
+        :crypto.hash_update(context0, binary)
+      end
+    )
+    |> :crypto.hash_final()
   end
 
   @doc """
@@ -179,10 +182,11 @@ defmodule MerkleTree do
     case my_tree.hash == other_tree.hash do
       true ->
         []
+
       false ->
         Enum.zip(my_tree.children, other_tree.children)
         |> Enum.map(&compare_trees/1)
-        |> List.flatten
+        |> List.flatten()
     end
   end
 
@@ -195,10 +199,11 @@ defmodule MerkleTree do
       {:ok, segments} ->
         :erlang.binary_to_term(segments)
         |> Map.take(segment_list)
-        |> Map.values
+        |> Map.values()
         |> Enum.reduce(%{}, fn segment, acc ->
           Map.merge(acc, segment)
         end)
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -209,23 +214,26 @@ defmodule MerkleTree do
   """
   @spec compare_segments(%{}, %{}) :: [{:different | :missing | :other_missing, term()}]
   def compare_segments(my_segments, other_segments) do
-    my_key_set = Map.keys(my_segments) |> MapSet.new
+    my_key_set = Map.keys(my_segments) |> MapSet.new()
     my_set = MapSet.new(my_segments)
 
-    other_key_set = Map.keys(other_segments) |> MapSet.new
+    other_key_set = Map.keys(other_segments) |> MapSet.new()
     other_set = MapSet.new(other_segments)
 
     intersection =
       my_set
       |> MapSet.intersection(other_set)
-      |> Map.new
-      |> Map.keys
-      |> MapSet.new
-    key_intersection = MapSet.intersection(my_key_set, other_key_set)
-    difference = MapSet.difference(key_intersection, intersection) |> Enum.map(&({:different, &1}))
+      |> Map.new()
+      |> Map.keys()
+      |> MapSet.new()
 
-    me_missing = MapSet.difference(other_key_set, my_key_set) |> Enum.map(&({:missing, &1}))
-    other_missing = MapSet.difference(my_key_set, other_key_set) |> Enum.map(&({:other_missing, &1}))
+    key_intersection = MapSet.intersection(my_key_set, other_key_set)
+    difference = MapSet.difference(key_intersection, intersection) |> Enum.map(&{:different, &1})
+
+    me_missing = MapSet.difference(other_key_set, my_key_set) |> Enum.map(&{:missing, &1})
+
+    other_missing =
+      MapSet.difference(my_key_set, other_key_set) |> Enum.map(&{:other_missing, &1})
 
     difference ++ me_missing ++ other_missing
   end

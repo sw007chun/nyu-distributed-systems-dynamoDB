@@ -25,12 +25,13 @@ defmodule Ring.Gossip do
     members = Ring.reconcile_members(my_ring, other_ring)
 
     pre_status = Ring.member_status(members, other_node)
-    ignore_gossip = (pre_status == :invalid) or (pre_status == :down)
+    ignore_gossip = pre_status == :invalid or pre_status == :down
 
     {changed, new_ring} =
       case ignore_gossip do
         true ->
           {false, my_ring}
+
         false ->
           Ring.reconcile(my_ring, other_ring)
       end
@@ -42,6 +43,7 @@ defmodule Ring.Gossip do
         # Skipped Ring.ring_ready
         ring_2 = Ring.Claimant.ring_changed(my_node, new_ring)
         {:reconciled_ring, ring_2}
+
       _ ->
         :ignore
     end
@@ -56,9 +58,11 @@ defmodule Ring.Gossip do
   def recursive_gossip(ring) do
     my_node = Node.self()
     active_nodes = Ring.active_members(ring)
+
     case Enum.member?(active_nodes, my_node) do
       true ->
         recursive_gossip(ring, my_node)
+
       false ->
         random_recursive_gossip(ring)
     end
@@ -67,14 +71,16 @@ defmodule Ring.Gossip do
   def recursive_gossip(ring, node) do
     active_nodes = Ring.active_members(ring)
     children = get_children(active_nodes, node)
+
     for other_node <- children do
       send_ring(ring, other_node)
     end
+
     :ok
   end
 
   def random_recursive_gossip(ring) do
-    random_node = Ring.active_members(ring) |> Enum.random
+    random_node = Ring.active_members(ring) |> Enum.random()
     recursive_gossip(ring, random_node)
   end
 
@@ -85,7 +91,7 @@ defmodule Ring.Gossip do
     expanded =
       nodes
       |> List.duplicate(3)
-      |> List.flatten
+      |> List.flatten()
 
     index = Enum.find_index(expanded, fn x -> x == parent_node end)
     Enum.slice(expanded, 2 * index + 1, 2)

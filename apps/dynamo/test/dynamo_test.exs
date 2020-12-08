@@ -1,6 +1,9 @@
 defmodule DynamoTest do
   use ExUnit.Case
-  # doctest Dynamo
+
+  # setup do
+  #   GenServer.
+  # end
 
   # test "greets the world" do
   #   assert Dynamo.hello() == :world

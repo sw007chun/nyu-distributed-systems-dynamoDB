@@ -34,7 +34,13 @@ defmodule KVServer.Command do
 
   def run({:get, key}) do
     value = KV.get(key)
-    {:ok, "#{value}\nOK\n"}
+    value =
+      if is_list(value) do
+        Enum.join(value, ", ")
+      else
+        value
+      end
+    {:ok, "#{value}\n"}
   end
 
   def run({:put, key, value}) do

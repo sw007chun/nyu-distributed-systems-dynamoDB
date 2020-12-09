@@ -24,21 +24,21 @@ defmodule KV do
     sync_command(key, {:get, key, true})
   end
 
-  def try_until_stable(key) do
-    _ = get(key)
-
-    if get_all(key) do
-      now()
-    else
-      try_until_stable(key)
-    end
-  end
-
   def stabilize(key) do
     start = now()
     done = try_until_stable(key)
     Logger.info("Stabilized in: #{done - start} msec")
     done - start
+  end
+
+  def try_until_stable(key) do
+    _ = get(key)
+
+    if get_all(key) != false do
+      now()
+    else
+      try_until_stable(key)
+    end
   end
 
   @spec delete(term()) :: term()

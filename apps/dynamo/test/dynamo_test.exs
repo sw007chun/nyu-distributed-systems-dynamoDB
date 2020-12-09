@@ -80,7 +80,7 @@ defmodule DynamoTest do
 
     assert :gen_tcp.recv(socket2, 0) == {:ok, "Joining \"node-11@127.0.0.1\" \n"}
     assert :gen_tcp.recv(socket3, 0) == {:ok, "Joining \"node-21@127.0.0.1\" \n"}
-    Process.sleep(100)
+    Process.sleep(1000)
 
     # put (hello, world) into the dynamo cluster
     :gen_tcp.send(socket1, "PUT hello world\n")
@@ -89,26 +89,44 @@ defmodule DynamoTest do
 
     # retrieving same value from any node in the cluster
     :gen_tcp.send(socket1, "GET hello\n")
-    assert :gen_tcp.recv(socket1, 0) == {:ok, "world\nOK\n"}
+    assert :gen_tcp.recv(socket1, 0) == {:ok, "world\n"}
     :gen_tcp.send(socket2, "GET hello\n")
-    assert :gen_tcp.recv(socket2, 0) == {:ok, "world\nOK\n"}
+    assert :gen_tcp.recv(socket2, 0) == {:ok, "world\n"}
     :gen_tcp.send(socket3, "GET hello\n")
-    assert :gen_tcp.recv(socket3, 0) == {:ok, "world\nOK\n"}
+    assert :gen_tcp.recv(socket3, 0) == {:ok, "world\n"}
+
+    Node.spawn(node1, fn ->
+      KV.put_single(
+        "hello",
+        "foo",
+        913438523331814323877303020447676887284957839360
+      )
+    end)
 
     Node.spawn(node2, fn ->
       KV.put_single(
         "hello",
+        "bar",
+        548063113999088594326381812268606132370974703616
+      )
+    end)
+
+    Node.spawn(node3, fn ->
+      KV.put_single(
+        "hello",
         "baz",
-        548_063_113_999_088_594_326_381_812_268_606_132_370_974_703_616
+        730750818665451459101842416358141509827966271488
       )
     end)
 
     Process.sleep(100)
     :gen_tcp.send(socket2, "STABILIZE hello\n")
-    # receive do
-    #   a -> IO.puts a
-    # end
+    {:ok, stabilization_time} = :gen_tcp.recv(socket2, 0)
 
-    IO.puts(inspect(:gen_tcp.recv(socket2, 0)))
+    :gen_tcp.send(socket1, "GET hello\n")
+    {:ok, value} = :gen_tcp.recv(socket1, 0)
+
+    IO.puts stabilization_time
+    IO.puts value
   end
 end

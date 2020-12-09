@@ -59,6 +59,7 @@ defmodule Vnode do
     context = VClock.increment(context, Node.self())
     state = put_in(state, [:data, state.partition, key], {value, context})
 
+    # Method for receiving put response from replication vnodes
     Vnode.Replication.replicate_put(
       key,
       value,
@@ -79,7 +80,6 @@ defmodule Vnode do
     Logger.info("#{Node.self()} replicating #{key}: #{value} to #{state.partition}")
 
     state = put_in(state, [:data, index, key], {value, context})
-
     Process.sleep(random_delay(@mean))
     send(sender, {:ok, nonce})
     {:noreply, state}
@@ -87,15 +87,25 @@ defmodule Vnode do
 
   @impl true
   def handle_call({:get, key, get_all}, _from, state) do
-    {value, context} = get_in(state, [:data, state.partition, key])
+    {value, context} =
+      state.data
+      |> Map.get(state.partition, %{})
+      |> Map.get(key, {nil, %{}})
 
     {value, state} =
       if get_all do
+        # Testing code
+        # Retrieves all current values from replication vnodes and checks consistency
         result = Vnode.Replication.get_all_read(key, value, context, state)
-
-        IO.puts(result)
-        {value, state}
+        Logger.info("All values: " <> Enum.join(result, ", "))
+        if value == result do
+          {true, state}
+        else
+          {false, state}
+        end
       else
+        # Spawn a async task for get reponses from vnodes
+        # Unlike put replication, spawning a new process is needed for read repair
         task =
           Dynamo.TaskSupervisor
           |> Task.Supervisor.async(fn ->
@@ -114,13 +124,16 @@ defmodule Vnode do
   def handle_cast({:get_repl, sender, index, key, nonce, delay}, state) do
     Logger.info("Returning #{key} value stored in replica")
 
-    value = get_in(state, [:data, index, key])
+    value_context =
+      state.data
+      |> Map.get(index, %{})
+      |> Map.get(key, {nil, %{}})
 
     if delay do
       Process.sleep(random_delay(@mean))
     end
 
-    send(sender, {:ok, nonce, key, value, state.partition, Node.self()})
+    send(sender, {:ok, nonce, key, value_context, state.partition, Node.self()})
     {:noreply, state}
   end
 
@@ -136,24 +149,20 @@ defmodule Vnode do
   end
 
   # Function for testing
+  # This intentinally put a value into a vnode without replication
+  # This is for making concurrent values in the cluster
   @impl true
   def handle_call({:put_single, key, value, index}, _from, state) do
-    Logger.info("Putting single #{key}")
-
-    key_value_map = Map.get(state.data, index, %{})
-    {_, context} = Map.get(key_value_map, key, {nil, %{}})
-    context = VClock.increment(context, Node.self())
-    IO.puts("New context: #{inspect(context)}")
-    key_value_map = Map.put(key_value_map, key, {value, context})
-    new_data = Map.put(state.data, index, key_value_map)
-
-    {_, new_data} =
+    {_, context} =
       state.data
-      |> Map.get_and_update(index, fn index_store ->
-        {nil, Map.put(index_store, key, {value, context})}
-      end)
+      |> Map.get(index, %{})
+      |> Map.get(key, {nil, %{}})
+    context = VClock.increment(context, Node.self())
+    Logger.info("Putting single #{key}: #{value}. New context: #{inspect(context)}")
 
-    {:reply, :ok, %{state | data: new_data}}
+    state = put_in(state, [:data, index, key], {value, context})
+
+    {:reply, :ok, state}
   end
 
   # Remove after done

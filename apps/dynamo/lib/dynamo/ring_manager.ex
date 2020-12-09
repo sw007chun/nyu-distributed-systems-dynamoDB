@@ -8,6 +8,7 @@ defmodule Ring.Manager do
   @type chash_node() :: term()
   @type index() :: <<_::160>>
   @type index_as_int() :: non_neg_integer()
+  @type node_entry() :: {index_as_int(), chash_node()}
   @type ring() :: Ring
 
   def start_link(opts) do
@@ -33,14 +34,28 @@ defmodule Ring.Manager do
   @doc """
   Return preference list of size n_val
   """
-  @spec get_preference_list(index_as_int(), integer()) :: [chash_node()]
+  @spec get_preference_list(index_as_int(), integer()) :: [node_entry()]
   def get_preference_list(index, n_val) when is_integer(index) do
     get_preference_list(<<index::160>>, n_val)
   end
 
-  @spec get_preference_list(index(), integer()) :: [chash_node()]
+  @spec get_preference_list(index(), integer()) :: [node_entry()]
   def get_preference_list(index, n_val) do
     GenServer.call(__MODULE__, {:get_preference_list, index, n_val})
+  end
+
+  @doc """
+  Return preference list of size n_val
+  and exclude Node.self()
+  """
+  @spec get_self_exclusive_pref_list(index_as_int(), integer()) :: [node_entry()]
+  def get_self_exclusive_pref_list(index, n_val) when is_integer(index) do
+    get_self_exclusive_pref_list(<<index::160>>, n_val)
+  end
+
+  @spec get_self_exclusive_pref_list(index(), integer()) :: [node_entry()]
+  def get_self_exclusive_pref_list(index, n_val) do
+    GenServer.call(__MODULE__, {:get_self_exclusive_pref_list, index, n_val})
   end
 
   @doc """
@@ -72,6 +87,16 @@ defmodule Ring.Manager do
   @impl true
   def handle_call({:get_preference_list, index, n_val}, _from, ring) do
     successors = CHash.successors(index, n_val, ring.chring)
+    {:reply, successors, ring}
+  end
+
+  @impl true
+  def handle_call({:get_self_exclusive_pref_list, index, n_val}, _from, ring) do
+    successors =
+      CHash.successors(index, n_val, ring.chring)
+      |> Enum.filter(fn {_i, node} ->
+        node != Node.self()
+      end)
     {:reply, successors, ring}
   end
 

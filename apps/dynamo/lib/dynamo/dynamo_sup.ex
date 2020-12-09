@@ -17,6 +17,7 @@ defmodule Dynamo.Supervisor do
       {Vnode.Manager, name: Vnode.Manager},
       {Ring.Gossip, name: Ring.Gossip},
       {Vnode.Master, name: Vnode.Master},
+      {ActiveAntiEntropy, name: ActiveAntiEntropy},
       Supervisor.child_spec({Task, fn -> KVServer.accept(port) end}, restart: :permanent)
     ]
 

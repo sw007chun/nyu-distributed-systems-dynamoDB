@@ -27,7 +27,6 @@ defmodule KV do
   def stabilize(key) do
     start = now()
     done = try_until_stable(key)
-    Logger.info("Stabilized in: #{done - start} msec")
     done - start
   end
 

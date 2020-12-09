@@ -1,32 +1,6 @@
 defmodule DynamoTest do
   use ExUnit.Case
 
-  # test "something with a required cluster" do
-  #   nodes = LocalCluster.start_nodes("node-", 3, [
-  # files: [
-  #   __ENV__.file
-  # ],
-  #   ])
-
-  #   [node1, node2, node3] = nodes
-  #   pid = self()
-  #   Node.spawn(node2, fn -> Dynamo.join(:"node-1@127.0.0.1") end)
-  #   Node.spawn(node3, fn -> Dynamo.join(:"node-2@127.0.0.1") end)
-  #   Node.spawn(node1, fn -> send(pid, KV.put(:hello, "world")) end)
-
-  #   assert_receive :ok
-
-  #   Node.spawn(node1, fn -> send(pid, KV.get(:hello)) end)
-  #   Node.spawn(node2, fn -> send(pid, KV.get(:hello)) end)
-  #   Node.spawn(node3, fn -> send(pid, KV.get(:hello)) end)
-
-  #   assert_receive "world"
-  #   assert_receive "world"
-  #   assert_receive "world"
-
-  # end
-
-  @tag capture_log: false
   test "tcp connection" do
     [replication, read, write] = [3, 2, 2]
     [port1, port2, port3] = [4041, 4042, 4043]
@@ -125,8 +99,8 @@ defmodule DynamoTest do
 
     :gen_tcp.send(socket1, "GET hello\n")
     {:ok, value} = :gen_tcp.recv(socket1, 0)
+    assert value == "bar, baz, foo\n"
 
-    IO.puts stabilization_time
-    IO.puts value
+    IO.puts "Stabilization time: #{stabilization_time}"
   end
 end

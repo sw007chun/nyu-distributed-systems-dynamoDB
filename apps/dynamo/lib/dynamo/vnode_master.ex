@@ -14,7 +14,6 @@ defmodule Vnode.Master do
 
   @spec command(index_as_int(), term()) :: term()
   def command({index, node}, msg) do
-    Logger.info("#{Node.self()} Received async command #{inspect(msg)}")
     GenServer.cast({__MODULE__, node}, {:command, index, msg})
   end
 
@@ -36,7 +35,7 @@ defmodule Vnode.Master do
   def handle_cast({:command, index, msg}, state) do
     Logger.info("#{Node.self()} received command #{inspect(msg)}")
     pid = Vnode.Manager.get_vnode_pid(index)
-    result = GenServer.cast(pid, msg)
+    GenServer.cast(pid, msg)
     {:noreply, state}
   end
 

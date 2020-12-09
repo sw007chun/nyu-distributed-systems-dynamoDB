@@ -20,4 +20,4 @@ erl_crash.dump
 *.ez
 
 # key_store is only for testing the app
-/key_store/
+**/key_store/

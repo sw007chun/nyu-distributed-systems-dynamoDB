@@ -4,8 +4,10 @@ defmodule Vnode.Replication do
   @doc """
   Replicate operations to following vnodes
   """
-  def replicate_put(key, value, context, my_index, num_replication, num_write) do
-    pref_list = Ring.Manager.get_preference_list(my_index, num_replication - 1)
+  def replicate_put(key, value, context, state) do
+    my_index = state.partition
+    pref_list = Ring.Manager.get_self_exclusive_pref_list(my_index, state.replication - 1)
+    num_write = min(length(pref_list) + 1, state.write)
     nonce = :erlang.phash2({key, value, context})
 
     Logger.info("Waiting for W replies")
@@ -34,7 +36,7 @@ defmodule Vnode.Replication do
   end
 
   defp wait_write_response(current_write, num_write, nonce) do
-    Logger.info("#{current_write}/#{num_write}")
+    Logger.info("W responses: #{current_write}/#{num_write}")
     receive do
       # We need to add vclock or nonce for checking
       {:ok, ^nonce} ->
@@ -50,7 +52,8 @@ defmodule Vnode.Replication do
 
   def replicate_get(key, value, context, state) do
     my_index = state.partition
-    pref_list = Ring.Manager.get_preference_list(my_index, state.replication - 1)
+    pref_list = Ring.Manager.get_self_exclusive_pref_list(my_index, state.replication - 1)
+    num_read = min(length(pref_list) + 1, state.read)
     nonce = :erlang.phash2({key, value, context})
 
     Logger.info("Waiting for R replies")
@@ -60,11 +63,12 @@ defmodule Vnode.Replication do
     {:ok, task_pid} =
       Dynamo.TaskSupervisor
       |> Task.Supervisor.start_child(fn ->
-        wait_read_response(key, value, my_index, context, state, 1, pid, nonce)
+        wait_read_response(key, value, my_index, context, state, 1, num_read, pid, nonce)
       end)
 
     # send asynchronous replication task to other vnodes
     for {index, node} <- pref_list do
+      Logger.info inspect node
       GenServer.cast(
         {Vnode.Master, node},
         {:command, index,
@@ -84,12 +88,12 @@ defmodule Vnode.Replication do
     end
   end
 
-  defp wait_read_response(key, value, index, context, state, current_read, parent, nonce) do
-    Logger.info("R responses: #{current_read}/#{state.read}")
+  defp wait_read_response(key, value, index, context, state, current_read, num_read, parent, nonce) do
+    Logger.info("R responses: #{current_read}/#{num_read}")
 
-    # When R reponses has been returned send a message to `replicate_get` process
+    # When R reponses has been returned send a message to `replicate_get` process.
     # But keep on receiving messages for read repair
-    if current_read == state.read do
+    if current_read == num_read do
       send(parent, {:ok, {value, state}})
     end
 
@@ -98,9 +102,9 @@ defmodule Vnode.Replication do
         {:ok, ^nonce, ^key, {other_value, other_context}, other_index, sender} ->
           case VClock.compare_vclocks(context, other_context) do
             :after ->
-              Logger.info("Vclock After")
-              Logger.info("#{value}, #{other_value}")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
+              # Logger.info("Vclock After")
+              # Logger.info("#{value}, #{other_value}")
+              # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # If my vlock is descendent of other vclock, put my value to the sender
               GenServer.cast(
                 {Vnode.Master, sender},
@@ -108,23 +112,26 @@ defmodule Vnode.Replication do
                   {:read_repair, key, value, index, context}}
               )
 
-              wait_read_response(key, value, index, context, state, current_read + 1, parent, nonce)
+              wait_read_response(key, value, index, context, state, current_read + 1, num_read, parent, nonce)
 
             :before ->
-              Logger.info("Vclock Before")
-              Logger.info("#{value}, #{other_value}")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
+              # Logger.info("Vclock Before")
+              # Logger.info("#{value}, #{other_value}")
+              # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # If my vlock is ancestor of other vclock, put other value to me
               state = put_in(state, [:data, index, key], {other_value, other_context})
-              wait_read_response(key, other_value, index, other_context, state, current_read + 1, parent, nonce)
+              wait_read_response(key, other_value, index, other_context, state, current_read + 1, num_read, parent, nonce)
 
             :equal when value == other_value ->
-              wait_read_response(key, value, index, context, state, current_read + 1, parent, nonce)
+              # Logger.info("Vclock Equal")
+              # Logger.info("#{value}, #{other_value}")
+              # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
+              wait_read_response(key, value, index, context, state, current_read + 1, num_read, parent, nonce)
 
             _ ->
-              Logger.info("Vclock Concurrent")
-              Logger.info("#{value}, #{other_value}")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
+              # Logger.info("Vclock Concurrent")
+              # Logger.info("#{value}, #{other_value}")
+              # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # If it's vclock is concurrent, merge two vclocks and increment my node
               # Also, add all the values to the node and do a read repair to the sender
               new_context =
@@ -154,14 +161,11 @@ defmodule Vnode.Replication do
                   {:read_repair, key, new_value, index, new_context}}
               )
 
-              wait_read_response(key, new_value, index, new_context, state, current_read + 1, parent, nonce)
+              wait_read_response(key, new_value, index, new_context, state, current_read + 1, num_read, parent, nonce)
           end
       :timeout ->
         Logger.info("Timed out while waiting for R replies")
-        {:ok, {value, state}}
       end
-    else
-      :ok
     end
   end
 

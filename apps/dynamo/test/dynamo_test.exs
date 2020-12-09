@@ -1,6 +1,8 @@
 defmodule DynamoTest do
   use ExUnit.Case
 
+  # Please note that distributed test may fail from timeout in test enviroment
+  @tag :distributed
   test "tcp connection" do
     [replication, read, write] = [3, 2, 2]
     [port1, port2, port3] = [4041, 4042, 4043]

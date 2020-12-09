@@ -1,4 +1,9 @@
 defmodule ActiveAntiEntropy do
+  @moduledoc """
+  Active Anti-entropy using merkle tree
+
+  Note that this only works after every nodes have joined in the cluster.
+  """
   use GenServer
   require Logger
 
@@ -18,6 +23,10 @@ defmodule ActiveAntiEntropy do
     GenServer.call(__MODULE__, {:get_segments, index, segment_list})
   end
 
+  def start_aae() do
+    GenServer.cast(__MODULE__, :start_aae)
+  end
+
   @aae_freq 1_000
 
   @impl true
@@ -32,13 +41,6 @@ defmodule ActiveAntiEntropy do
       fn index, state0 ->
         Map.put(state0, index, MerkleTree.new(index))
       end)
-
-
-    Dynamo.TaskSupervisor
-    |> Task.Supervisor.start_child(fn ->
-      Process.sleep(@aae_freq)
-      GenServer.cast(__MODULE__, :start_aae)
-    end)
 
     {:ok, state}
   end
@@ -97,11 +99,19 @@ defmodule ActiveAntiEntropy do
       end
     end
 
+    # This is to prevent live lock
+    member_list = Ring.active_members(ring)
+    next_node =
+      member_list ++ member_list
+      |> Enum.drop_while(fn node -> node != Node.self() end)
+      |> Enum.at(1)
+
     Dynamo.TaskSupervisor
     |> Task.Supervisor.start_child(fn ->
       Process.sleep(@aae_freq)
-      GenServer.cast(__MODULE__, :start_aae)
+      GenServer.cast({__MODULE__, next_node}, :start_aae)
     end)
+
     {:noreply, state}
   end
 end

@@ -146,7 +146,7 @@ defmodule Vnode do
   # Callback for put replication.
   @impl true
   def handle_cast({:put_repl, sender, index, key, value, context, nonce}, state) do
-    # Logger.info("#{Node.self()} replicating #{key}: #{value} to #{state.partition}")
+    Logger.info("#{Node.self()} replicating #{key}: #{value} to #{state.partition}")
     state = put_in(state, [:data, index, key], {value, context})
     ActiveAntiEntropy.insert(key, value, index)
     Process.sleep(random_delay(@mean))

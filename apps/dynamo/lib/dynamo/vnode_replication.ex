@@ -36,7 +36,7 @@ defmodule Vnode.Replication do
   end
 
   defp wait_write_response(current_write, num_write, nonce) do
-    Logger.info("W responses: #{current_write}/#{num_write}")
+    # Logger.info("W responses: #{current_write}/#{num_write}")
     receive do
       # We need to add vclock or nonce for checking
       {:ok, ^nonce} ->
@@ -89,7 +89,7 @@ defmodule Vnode.Replication do
   end
 
   defp wait_read_response(key, value, index, context, state, current_read, num_read, parent, nonce) do
-    Logger.info("R responses: #{current_read}/#{num_read}")
+    # Logger.info("R responses: #{current_read}/#{num_read}")
 
     # When R reponses has been returned send a message to `replicate_get` process.
     # But keep on receiving messages for read repair
@@ -164,7 +164,7 @@ defmodule Vnode.Replication do
               wait_read_response(key, new_value, index, new_context, state, current_read + 1, num_read, parent, nonce)
           end
       :timeout ->
-        Logger.info("Timed out while waiting for R replies")
+        # Logger.info("Timed out while waiting for R replies")
       end
     end
   end

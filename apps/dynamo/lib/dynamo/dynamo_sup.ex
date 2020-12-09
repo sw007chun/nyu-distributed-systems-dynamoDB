@@ -7,7 +7,8 @@ defmodule Dynamo.Supervisor do
 
   @impl true
   def init(:ok) do
-    port = String.to_integer(System.get_env("PORT") || Application.get_env(:dynamo, :port) || "4040")
+    port =
+      String.to_integer(System.get_env("PORT") || Application.get_env(:dynamo, :port) || "4040")
 
     children = [
       {DynamicSupervisor, name: Vnode.Supervisor, strategy: :one_for_one},

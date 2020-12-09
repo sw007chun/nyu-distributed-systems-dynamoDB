@@ -12,8 +12,8 @@ defmodule VClockTest do
   end
 
   test "increment is correct" do
-    assert VClock.increment(:a, %{a: 7, b: 22}) == %{a: 8, b: 22}
-    assert VClock.increment(:c, %{a: 7, b: 22}) == %{a: 7, b: 22, c: 1}
+    assert VClock.increment(%{a: 7, b: 22}, :a) == %{a: 8, b: 22}
+    assert VClock.increment(%{a: 7, b: 22}, :c) == %{a: 7, b: 22, c: 1}
   end
 
   test "compare_vclocks is correct" do
@@ -27,15 +27,15 @@ defmodule VClockTest do
   test "vclock functions" do
     a = VClock.new_clock()
     b = VClock.new_clock()
-    a1 = VClock.increment(:a, a)
-    b1 = VClock.increment(:b, b)
+    a1 = VClock.increment(a, :a)
+    b1 = VClock.increment(b, :b)
     :before = VClock.compare_vclocks(a, a1)
     :before = VClock.compare_vclocks(b, b1)
     :concurrent = VClock.compare_vclocks(a1, b1)
 
-    a2 = VClock.increment(:a, a1)
+    a2 = VClock.increment(a1, :a)
     c = VClock.merge_vclocks(a2, b1)
-    c1 = VClock.increment(:c, c)
+    c1 = VClock.increment(c, :c)
     :after = VClock.compare_vclocks(c1, a2)
     :after = VClock.compare_vclocks(c1, b1)
     :before = VClock.compare_vclocks(b1, c1)

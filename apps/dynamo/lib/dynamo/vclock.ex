@@ -35,8 +35,8 @@ defmodule VClock do
   @doc """
   Increment node's counter by 1 or default to 1 if node is not in the vector clock
   """
-  @spec increment(vclock_node(), vclock()) :: vclock()
-  def increment(node, vclock) do
+  @spec increment(vclock(), vclock_node()) :: vclock()
+  def increment(vclock, node) do
     Map.update(vclock, node, 1, &(&1 + 1))
   end
 

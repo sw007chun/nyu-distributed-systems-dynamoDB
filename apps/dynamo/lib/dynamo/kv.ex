@@ -26,6 +26,7 @@ defmodule KV do
 
   def try_until_stable(key) do
     _ = get(key)
+
     if get_all(key) do
       now()
     else
@@ -73,6 +74,6 @@ defmodule KV do
 
   def now() do
     {mega, seconds, ms} = :os.timestamp()
-    (mega*1000000 + seconds)*1000 + :erlang.round(ms/1000)
+    (mega * 1_000_000 + seconds) * 1000 + :erlang.round(ms / 1000)
   end
 end

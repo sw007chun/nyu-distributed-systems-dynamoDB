@@ -1,7 +1,6 @@
 defmodule Vnode.Replication do
   require Logger
 
-
   @doc """
   Replicate operations to following vnodes
   """
@@ -18,14 +17,14 @@ defmodule Vnode.Replication do
 
     # send asynchronous replication task to other vnodes
     for {index, node} <- pref_list do
-        {Dynamo.TaskSupervisor, node}
-        |> Task.Supervisor.start_child(Vnode.Master, :command, [
-          {index, node},
-          {:put_repl, task.pid, my_index, key, value, context, nonce}
-        ])
+      GenServer.cast(
+        {Vnode.Master, node},
+        {:command, index,
+          {:put_repl, task.pid, my_index, key, value, context, nonce}}
+      )
     end
 
-    :ok = Task.await(task)
+    :ok = Task.await(task, :infinity)
   end
 
   # this is for spawning async task for getting acks from other vnodes
@@ -45,156 +44,136 @@ defmodule Vnode.Replication do
     end
   end
 
-  def replicate_get(key, value, context, my_index, state, num_replication, num_read) do
-    pref_list = Ring.Manager.get_preference_list(my_index, num_replication - 1)
-    current_read = 1
+  @read_repair_timeout 50
 
+  def replicate_get(key, value, context, state) do
+    my_index = state.partition
+    pref_list = Ring.Manager.get_preference_list(my_index, state.replication - 1)
+    nonce = :erlang.phash2({key, value, context})
+
+    Logger.info("Waiting for R replies")
+
+    pid = self()
     # spawn a asynchronous task for receiving the ack from replicating vnodes
-    task =
+    {:ok, task_pid} =
       Dynamo.TaskSupervisor
-      |> Task.Supervisor.async(fn ->
-        wait_read_response(key, value, my_index, context, state, current_read, num_read)
+      |> Task.Supervisor.start_child(fn ->
+        wait_read_response(key, value, my_index, context, state, 1, pid, nonce)
       end)
 
     # send asynchronous replication task to other vnodes
     for {index, node} <- pref_list do
-        {Dynamo.TaskSupervisor, node}
-        |> Task.Supervisor.start_child(Vnode.Master, :command, [
-          {index, node},
-          {:get_repl, task.pid, my_index, key, true}
-        ])
+      GenServer.cast(
+        {Vnode.Master, node},
+        {:command, index,
+          {:get_repl, task_pid, my_index, key, nonce, true}}
+      )
     end
 
-    Task.await(task)
+    Process.send_after(task_pid, :timeout, @read_repair_timeout)
+
+    receive do
+      {:ok, {value, state}} -> {value, state}
+    end
   end
 
-  defp wait_read_response(key, value, index, context, state, current_read, num_read) do
-    Logger.info "current: #{current_read}/#{num_read}"
-    if current_read < num_read do
+  defp wait_read_response(key, value, index, context, state, current_read, parent, nonce) do
+    Logger.info("R responses: #{current_read}/#{state.read}")
+
+    if current_read == state.read do
+      send(parent, {:ok, {value, state}})
+    end
+
+    if current_read < state.replication do
       receive do
-        {:ok, ^key, {other_value, other_context}, other_index, sender} ->
+        {:ok, ^nonce, ^key, {other_value, other_context}, other_index, sender} ->
           case VClock.compare_vclocks(context, other_context) do
             :after ->
-              Logger.info("vclock received. Result of comparison: After")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
-
               GenServer.cast(
                 {Vnode.Master, sender},
-                {:command, Node.self(), other_index, {:update_repl, key, value, index, context}}
+                {:command, other_index,
+                  {:read_repair, key, value, index, context}}
               )
 
-              wait_read_response(key, value, index, context, state, current_read + 1, num_read)
+              wait_read_response(key, value, index, context, state, current_read + 1, parent, nonce)
 
             :before ->
-              Logger.info("vclock received. Result of comparison: Before")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
-
-              {_, index_map} =
-                state.data
-                |> Map.get_and_update(index, fn index_store ->
-                  {nil, Map.put(index_store, key, {other_value, other_context})}
-                end)
-
-              state = %{state | data: index_map}
-
-              wait_read_response(
-                key,
-                other_value,
-                index,
-                other_context,
-                state,
-                current_read + 1,
-                num_read
-              )
+              state = put_in(state, [:data, index, key], {other_value, other_context})
+              wait_read_response(key, other_value, index, other_context, state, current_read + 1, parent, nonce)
 
             :equal when value == other_value ->
-              Logger.info("vclock received. Result of comparison: Equal")
-              Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
-              wait_read_response(key, value, index, context, state, current_read + 1, num_read)
+              wait_read_response(key, value, index, context, state, current_read + 1, parent, nonce)
 
             _ ->
-              Logger.info("vclock received. Result of comparison: Concurrent")
+              Logger.info("Vclock Concurrent")
+              Logger.info("#{value}, #{other_value}")
               Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # Merging concurrent vclocks into one
               # Incrementing the vclock and adding all concurrent values to a list
               # Sending the update replica command back to the node
-              new_context = VClock.merge_vclocks(context, other_context)
-              new_context = VClock.increment(Node.self(), new_context)
+              new_context =
+                context
+                |> VClock.merge_vclocks(other_context)
+                |> VClock.increment(Node.self())
 
               new_value =
-                if is_list(value) do
-                  value
-                else
-                  [value]
-                end
+                ([value] ++ [other_value])
+                |> List.flatten()
+                |> Enum.uniq()
 
               new_value =
-                if is_list(other_value) do
-                  new_value ++ other_value
-                else
-                  new_value ++ [other_value]
-                end
-                |> Enum.uniq
-
-              new_value =
-                if length(new_value) do
+                if length(new_value) == 1 do
                   Enum.take(new_value, 1)
                 else
                   new_value
                 end
 
-              {_, index_map} =
-                state.data
-                |> Map.get_and_update(index, fn index_store ->
-                  {nil, Map.put(index_store, key, {new_value, new_context})}
-                end)
-
-              state = %{state | data: index_map}
+              state = put_in(state, [:data, index, key], {new_value, new_context})
 
               GenServer.cast(
                 {Vnode.Master, sender},
-                {:command, Node.self(), other_index,
-                 {:update_repl, key, new_value, index, new_context}}
+                {:command, other_index,
+                  {:read_repair, key, new_value, index, new_context}}
               )
 
-              wait_read_response(
-                key,
-                new_value,
-                index,
-                new_context,
-                state,
-                current_read + 1,
-                num_read
-              )
+              wait_read_response(key, new_value, index, new_context, state, current_read + 1, parent, nonce)
           end
-      after
-        1_000 ->
-          Logger.info("Timed out while waiting for R replies")
-          {value, state}
+      :timeout ->
+        Logger.info("Timed out while waiting for R replies")
+        :ok
       end
     else
-      {value, state}
+      :ok
     end
   end
 
-  def get_all_read(key, value, context, my_index, state, num_replication, num_read) do
-    pref_list = Ring.Manager.get_preference_list(my_index, num_replication - 1)
+  def get_all_read(key, value, context, state) do
+    my_index = state.partition
+    pref_list = Ring.Manager.get_preference_list(my_index, state.replication - 1)
     current_read = 1
-
+    nonce = :erlang.phash2({key, value, context})
     # spawn a asynchronous task for receiving the ack from replicating vnodes
     task =
       Dynamo.TaskSupervisor
       |> Task.Supervisor.async(fn ->
-        wait_all_read_response(key, value, my_index, context, state, current_read, num_replication)
+        wait_all_read_response(
+          key,
+          value,
+          my_index,
+          context,
+          state,
+          current_read,
+          state.replication
+        )
       end)
 
     # send asynchronous replication task to other vnodes
     for {index, node} <- pref_list do
-        {Dynamo.TaskSupervisor, node}
-        |> Task.Supervisor.start_child(Vnode.Master, :command, [
-          {index, node},
-          {:get_repl, task.pid, my_index, key, false}
-        ])
+      {Dynamo.TaskSupervisor, node}
+      |> Task.Supervisor.start_child(Vnode.Master, :command, [
+        {index, node},
+        {:get_repl, task.pid, my_index, key, nonce, false}
+      ])
     end
 
     Task.await(task)
@@ -205,6 +184,7 @@ defmodule Vnode.Replication do
       receive do
         {:ok, ^key, {^value, ^context}, other_index, sender} ->
           wait_all_read_response(key, value, my_index, context, state, current_read + 1, num_read)
+
         _ ->
           false
       end
@@ -212,5 +192,4 @@ defmodule Vnode.Replication do
       true
     end
   end
-
 end

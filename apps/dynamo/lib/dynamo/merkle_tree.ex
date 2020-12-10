@@ -21,7 +21,7 @@ defmodule MerkleTree do
   def new(index) do
     # create directory and a file to store
     path = Path.join(@path, to_string(Node.self()))
-    if not File.exists?(path), do: File.mkdir(path)
+    if not File.exists?(path), do: File.mkdir_p(path)
 
     file_name =
       index

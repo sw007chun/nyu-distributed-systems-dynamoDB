@@ -32,6 +32,11 @@ defmodule KVServer.Command do
     {:ok, ring <> "\n"}
   end
 
+  def run(:start_aae) do
+    ActiveAntiEntropy.start()
+    {:ok, "OK\n"}
+  end
+
   def run({:get, key}) do
     value = KV.get(key)
     value =
@@ -48,20 +53,15 @@ defmodule KVServer.Command do
     {:ok, "OK\n"}
   end
 
-  def run({:delete, key}) do
-    KV.delete(key)
-    {:ok, "OK\n"}
-  end
-
   def parse(line) do
     case String.split(line) do
       ["JOIN", node] -> {:ok, {:join, node}}
       ["LEAVE"] -> {:ok, :leave}
       ["STABILIZE", key] -> {:ok, {:stabilize, key}}
       ["RING_STATUS"] -> {:ok, :ring_status}
+      ["START_AAE"] -> {:ok, :start_aae}
       ["GET", key] -> {:ok, {:get, key}}
       ["PUT", key, value] -> {:ok, {:put, key, value}}
-      ["DELETE", key] -> {:ok, {:delete, key}}
       _ -> {:error, :unknown_command}
     end
   end

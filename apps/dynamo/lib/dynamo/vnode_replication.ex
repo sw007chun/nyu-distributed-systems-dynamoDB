@@ -23,7 +23,7 @@ defmodule Vnode.Replication do
       GenServer.cast(
         {Vnode.Master, node},
         {:command, index,
-          {:put_repl, task.pid, my_index, key, value, context, nonce}}
+          {:put_repl, my_index, key, value, context, task.pid, nonce, false}}
       )
     end
 
@@ -76,14 +76,15 @@ defmodule Vnode.Replication do
     end
 
     receive do
-      {:ok, {value, state}} ->
+      {:ok, value} ->
         # This is timer to stop read repair process.
         Dynamo.TaskSupervisor
         |> Task.Supervisor.start_child(fn ->
           Process.sleep(@read_repair_timeout)
           send(task_pid, :timeout)
         end)
-        {value, state}
+
+        value
     end
   end
 
@@ -93,45 +94,30 @@ defmodule Vnode.Replication do
     # When R reponses has been returned send a message to `replicate_get` process.
     # But keep on receiving messages for read repair
     if current_read == num_read do
-      send(parent, {:ok, {value, state}})
+      send(parent, {:ok, value})
     end
 
     if current_read < state.replication do
       receive do
-        {:ok, ^nonce, ^key, {other_value, other_context}, other_index, sender} ->
+        {:ok, ^nonce, ^key, {other_value, other_context}, sender} ->
           case VClock.compare_vclocks(context, other_context) do
             :after ->
-              # Logger.info("Vclock After")
-              # Logger.info("#{value}, #{other_value}")
-              # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # If my vlock is descendent of other vclock, put my value to the sender
-              GenServer.cast(
-                {Vnode.Master, sender},
-                {:command, other_index,
-                  {:read_repair, key, value, index, context}}
-              )
-
+              GenServer.cast(sender, {:put_repl, index, key, value, context, nil, nil, true})
               wait_read_response(key, value, index, context, state, current_read + 1, num_read, parent, nonce)
 
             :before ->
-              # Logger.info("Vclock Before")
-              # Logger.info("#{value}, #{other_value}")
-              # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # If my vlock is ancestor of other vclock, put other value to me
-              state = put_in(state, [:data, index, key], {other_value, other_context})
+              # state = put_in(state, [:data, index, key], {other_value, other_context})
+              storage = Vnode.Master.get_partition_storage(index)
+              Agent.update(storage, &Map.put(&1, key, {other_value, other_context}))
               ActiveAntiEntropy.insert(key, other_value, index)
               wait_read_response(key, other_value, index, other_context, state, current_read + 1, num_read, parent, nonce)
 
             :equal when value == other_value ->
-              # Logger.info("Vclock Equal")
-              # Logger.info("#{value}, #{other_value}")
-              # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               wait_read_response(key, value, index, context, state, current_read + 1, num_read, parent, nonce)
 
             _ ->
-              # Logger.info("Vclock Concurrent")
-              # Logger.info("#{value}, #{other_value}")
-              # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # If it's vclock is concurrent, merge two vclocks and increment my node
               # Also, add all the values to the node and do a read repair to the sender
               new_context =
@@ -153,13 +139,9 @@ defmodule Vnode.Replication do
                   new_value
                 end
 
-              state = put_in(state, [:data, index, key], {new_value, new_context})
-
-              GenServer.cast(
-                {Vnode.Master, sender},
-                {:command, other_index,
-                  {:read_repair, key, new_value, index, new_context}}
-              )
+              storage = Vnode.Master.get_partition_storage(index)
+              Agent.update(storage, &Map.put(&1, key, {new_value, new_context}))
+              GenServer.cast(sender, {:put_repl, index, key, new_value, new_context, nil, nil, true})
 
               wait_read_response(key, new_value, index, new_context, state, current_read + 1, num_read, parent, nonce)
           end
@@ -206,9 +188,9 @@ defmodule Vnode.Replication do
   defp wait_all_read_response(key, value, context, state, current_read, nonce, acc) do
     if current_read < state.replication do
       receive do
-        {:ok, ^nonce, ^key, {^value, ^context}, _, _} ->
+        {:ok, ^nonce, ^key, {^value, ^context}, _} ->
           wait_all_read_response(key, value, context, state, current_read + 1, nonce, acc)
-          {:ok, ^nonce, ^key, {other_value, _}, _, _} ->
+        {:ok, ^nonce, ^key, {other_value, _}, _} ->
           wait_all_read_response(key, value, context, state, current_read + 1, nonce, MapSet.put(acc, other_value))
       end
     else

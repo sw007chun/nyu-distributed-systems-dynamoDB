@@ -25,11 +25,26 @@ defmodule Vnode.Master do
     GenServer.call({__MODULE__, node}, {:sync_command, index, msg}, :infinity)
   end
 
-  def get_vnode_pid(index) do
-    case Registry.lookup(Registry.Vnode, index) do
+  # Return pid of vnode in charge of partition
+  @spec get_vnode_pid(non_neg_integer()) :: pid()
+  defp get_vnode_pid(partition) do
+    case Registry.lookup(Registry.Vnode, partition) do
       [{pid, _}] -> pid
       _ ->
-        DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, index})
+        {:ok, pid} = DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, partition})
+        pid
+    end
+  end
+
+  # Return pid of Agent storing {key, value} pair of partition
+  @spec get_partition_storage(non_neg_integer()) :: pid()
+  def get_partition_storage(partition) do
+    case Registry.lookup(Registry.Vnode, {"Storage", partition}) do
+      [{pid, _}] -> pid
+      [] ->
+        name = {:via, Registry, {Registry.Vnode, {"Storage", partition}}}
+        {:ok, pid} = Agent.start_link(fn -> %{} end, name: name)
+        pid
     end
   end
 
@@ -46,7 +61,6 @@ defmodule Vnode.Master do
 
   @impl true
   def handle_cast({:command, index, msg}, state) do
-    Logger.info("#{Node.self()} received command #{inspect(msg)}")
     pid = get_vnode_pid(index)
     GenServer.cast(pid, msg)
     {:noreply, state}
@@ -55,7 +69,6 @@ defmodule Vnode.Master do
   # Find pid of vnode responsible for hash index and send command.
   @impl true
   def handle_call({:sync_command, index, msg}, _from, state) do
-    Logger.info("#{Node.self()} received sync command #{inspect(msg)}")
     pid = get_vnode_pid(index)
     result = GenServer.call(pid, msg, :infinity)
     {:reply, result, state}

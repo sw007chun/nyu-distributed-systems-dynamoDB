@@ -165,6 +165,7 @@ defmodule Vnode.Replication do
           end
       :timeout ->
         # Logger.info("Timed out while waiting for R replies")
+        :timeout
       end
     end
   end

@@ -10,6 +10,9 @@ defmodule DynamoProject.MixProject do
       dializer: [
         plt_add_deps: :apps_direct
       ],
+      aliases: [
+        test: "test --no-start"
+      ],
       releases: [
         foo: [
           version: "0.0.1",

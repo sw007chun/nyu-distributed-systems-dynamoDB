@@ -46,15 +46,6 @@ defmodule ActiveAntiEntropy do
   end
 
   @impl true
-  def handle_cast({:insert, key, value, index}, state) do
-    state =
-      Map.update!(state, index, fn tree ->
-        MerkleTree.insert(tree, key, value)
-      end)
-    {:noreply, state}
-  end
-
-  @impl true
   def handle_call({:get_tree, index}, _from, state) do
     {tree, state} =
       Map.get_and_update!(state, index, fn tree ->
@@ -70,6 +61,15 @@ defmodule ActiveAntiEntropy do
       Map.get(state, index)
       |> MerkleTree.get_segments(segment_list)
     {:reply, segments, state}
+  end
+
+  @impl true
+  def handle_cast({:insert, key, value, index}, state) do
+    state =
+      Map.update!(state, index, fn tree ->
+        MerkleTree.insert(tree, key, value)
+      end)
+    {:noreply, state}
   end
 
   @impl true

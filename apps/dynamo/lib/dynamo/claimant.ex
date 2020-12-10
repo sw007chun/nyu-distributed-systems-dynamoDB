@@ -8,7 +8,7 @@ defmodule Ring.Claimant do
 
   @spec ring_changed(node_name(), ring()) :: ring()
   def ring_changed(node, ring) do
-    {changed, new_ring} = do_claimant(node, ring)
+    {_changed, new_ring} = do_claimant(node, ring)
     new_ring
   end
 

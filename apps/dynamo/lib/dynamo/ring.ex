@@ -36,7 +36,7 @@ defmodule Ring do
 
   @spec new_ring(non_neg_integer(), node_name()) :: %Ring{}
   def new_ring(ring_size, node_name) do
-    vclock = VClock.increment(node_name, VClock.new_clock())
+    vclock = VClock.increment(VClock.new_clock(), node_name)
 
     %Ring{
       node_name: node_name,
@@ -83,8 +83,8 @@ defmodule Ring do
   """
   @spec set_member(node_name(), ring(), node_name(), atom()) :: ring()
   def set_member(node, ring, member, status) do
-    my_vclock = VClock.increment(node, ring.vclock)
-    default_clock = {status, VClock.increment(node, VClock.new_clock())}
+    my_vclock = VClock.increment(ring.vclock, node)
+    default_clock = {status, VClock.increment(VClock.new_clock(), node)}
 
     new_members =
       ring.members
@@ -92,7 +92,7 @@ defmodule Ring do
         member,
         default_clock,
         fn {_status, vclock} ->
-          {status, VClock.increment(node, vclock)}
+          {status, VClock.increment(vclock, node)}
         end
       )
 
@@ -306,7 +306,7 @@ defmodule Ring do
   """
   @spec reconcile_divergent(node_name(), %Ring{}, %Ring{}) :: %Ring{}
   def reconcile_divergent(node, ring1, ring2) do
-    new_vclock = VClock.increment(node, VClock.merge_vclocks(ring1.vclock, ring2.vclock))
+    new_vclock = VClock.increment(VClock.merge_vclocks(ring1.vclock, ring2.vclock), node)
     new_members = reconcile_members(ring1, ring2)
     # arbitrary choice of ring1
     %{ring1 | vclock: new_vclock, members: new_members}
@@ -342,7 +342,7 @@ defmodule Ring do
 
       _ ->
         my_node = my_ring.node_name
-        new_vclock = VClock.increment(my_node, my_ring.vclock)
+        new_vclock = VClock.increment(my_ring.vclock, my_node)
         new_chring = CHash.update_owner(index, node, my_ring.chring)
         %{my_ring | vclock: new_vclock, chring: new_chring}
     end

@@ -1,4 +1,6 @@
 defmodule KV do
+  require Logger
+
   def ping do
     sync_command(:os.timestamp(), :ping)
   end
@@ -15,7 +17,27 @@ defmodule KV do
 
   @spec get(term()) :: term()
   def get(key) do
-    sync_command(key, {:get, key})
+    sync_command(key, {:get, key, false})
+  end
+
+  def get_all(key) do
+    sync_command(key, {:get, key, true})
+  end
+
+  def stabilize(key) do
+    start = now()
+    done = try_until_stable(key)
+    done - start
+  end
+
+  def try_until_stable(key) do
+    _ = get(key)
+
+    if get_all(key) != false do
+      now()
+    else
+      try_until_stable(key)
+    end
   end
 
   @spec delete(term()) :: term()
@@ -49,5 +71,8 @@ defmodule KV do
     # Vnode.Master.sync_command({index, Node.self()}, {:put_single, key, value, index_as_int})
   end
 
-  # Remove after done
+  def now() do
+    {mega, seconds, ms} = :os.timestamp()
+    (mega * 1_000_000 + seconds) * 1000 + :erlang.round(ms / 1000)
+  end
 end

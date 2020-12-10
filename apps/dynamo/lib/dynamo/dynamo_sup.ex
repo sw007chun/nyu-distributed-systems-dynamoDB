@@ -7,7 +7,8 @@ defmodule Dynamo.Supervisor do
 
   @impl true
   def init(:ok) do
-    port = String.to_integer(System.get_env("PORT") || "4040")
+    port =
+      String.to_integer(System.get_env("PORT") || Application.get_env(:dynamo, :port) || "4044")
 
     children = [
       {DynamicSupervisor, name: Vnode.Supervisor, strategy: :one_for_one},
@@ -16,6 +17,7 @@ defmodule Dynamo.Supervisor do
       {Vnode.Manager, name: Vnode.Manager},
       {Ring.Gossip, name: Ring.Gossip},
       {Vnode.Master, name: Vnode.Master},
+      {ActiveAntiEntropy, name: ActiveAntiEntropy},
       Supervisor.child_spec({Task, fn -> KVServer.accept(port) end}, restart: :permanent)
     ]
 

@@ -29,8 +29,8 @@ defmodule MerkleTreeTest do
     diff = MerkleTree.compare_trees({a4.tree, b7.tree})
     assert keys == diff
 
-    a_segments = MerkleTree.get_segments(a4.path, diff)
-    b_segments = MerkleTree.get_segments(b7.path, diff)
+    a_segments = MerkleTree.get_segments(a4, diff)
+    b_segments = MerkleTree.get_segments(b7, diff)
 
     assert [different: :hello, missing: :amazon, other_missing: :distributed] ==
              MerkleTree.compare_segments(a_segments, b_segments)

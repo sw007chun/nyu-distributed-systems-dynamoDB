@@ -15,18 +15,21 @@ defmodule MerkleTree do
   )
 
   @type index_as_int() :: non_neg_integer()
+  @type key() :: term()
 
   @spec new(index_as_int()) :: %MerkleTree{}
   def new(index) do
     # create directory and a file to store
-    if not File.exists?(@path), do: File.mkdir(@path)
+    path = Path.join(@path, to_string(Node.self()))
+    if not File.exists?(path), do: File.mkdir_p(path)
 
     file_name =
       index
       |> Integer.to_string()
       |> String.slice(0, 6)
 
-    file_path = Path.join(@path, file_name)
+    file_path = Path.join(path, file_name)
+    File.rm(file_path)
     File.touch(file_path)
 
     %MerkleTree{index: index, path: file_path}
@@ -193,9 +196,9 @@ defmodule MerkleTree do
   @doc """
   Return a merged map of segments from the file in the path
   """
-  @spec get_segments(Path.t(), [integer()]) :: %{term() => binary()} | {:error, term()}
-  def get_segments(path, segment_list) do
-    case File.read(path) do
+  @spec get_segments(%MerkleTree{}, [integer()]) :: %{key() => binary()} | {:error, term()}
+  def get_segments(state, segment_list) do
+    case File.read(state.path) do
       {:ok, segments} ->
         :erlang.binary_to_term(segments)
         |> Map.take(segment_list)
@@ -212,7 +215,7 @@ defmodule MerkleTree do
   @doc """
   Return a merged map of segments from the file in the path
   """
-  @spec compare_segments(%{}, %{}) :: [{:different | :missing | :other_missing, term()}]
+  @spec compare_segments(%{}, %{}) :: [{:different | :missing | :other_missing, key()}]
   def compare_segments(my_segments, other_segments) do
     my_key_set = Map.keys(my_segments) |> MapSet.new()
     my_set = MapSet.new(my_segments)

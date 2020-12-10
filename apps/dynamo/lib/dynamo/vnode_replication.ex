@@ -43,7 +43,7 @@ defmodule Vnode.Replication do
         wait_write_response(current_write + 1, num_write, nonce)
 
       other ->
-        Logger.info("#{inspect(other)}")
+        Logger.info("Wrong Response #{inspect(other)}")
         wait_write_response(current_write, num_write, nonce)
     end
   end
@@ -68,7 +68,6 @@ defmodule Vnode.Replication do
 
     # send asynchronous replication task to other vnodes
     for {index, node} <- pref_list do
-      Logger.info inspect node
       GenServer.cast(
         {Vnode.Master, node},
         {:command, index,
@@ -120,6 +119,7 @@ defmodule Vnode.Replication do
               # Logger.info("#{inspect(context)},...,#{inspect(other_context)}")
               # If my vlock is ancestor of other vclock, put other value to me
               state = put_in(state, [:data, index, key], {other_value, other_context})
+              ActiveAntiEntropy.insert(key, other_value, index)
               wait_read_response(key, other_value, index, other_context, state, current_read + 1, num_read, parent, nonce)
 
             :equal when value == other_value ->
@@ -186,7 +186,7 @@ defmodule Vnode.Replication do
           state,
           current_read,
           nonce,
-          List.flatten([value])
+          MapSet.new([value])
         )
       end)
 
@@ -208,10 +208,15 @@ defmodule Vnode.Replication do
         {:ok, ^nonce, ^key, {^value, ^context}, _, _} ->
           wait_all_read_response(key, value, context, state, current_read + 1, nonce, acc)
           {:ok, ^nonce, ^key, {other_value, _}, _, _} ->
-          wait_all_read_response(key, value, context, state, current_read + 1, nonce, List.flatten([other_value] ++ [acc]))
+          wait_all_read_response(key, value, context, state, current_read + 1, nonce, MapSet.put(acc, other_value))
       end
     else
-      acc
+      acc = MapSet.to_list(acc)
+      if length(acc) == 1 do
+        Enum.at(acc, 0)
+      else
+        acc
+      end
     end
   end
 end

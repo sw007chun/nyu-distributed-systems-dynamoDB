@@ -85,7 +85,7 @@ defmodule Vnode do
         # Testing code
         # Retrieves all current values from replication vnodes and checks consistency
         result = Vnode.Replication.get_all_read(key, value, context, state)
-        Logger.info("All values: " <> Enum.join(result, ", "))
+        Logger.info("#{inspect value}, #{inspect result}")
         if value == result do
           {true, state}
         else

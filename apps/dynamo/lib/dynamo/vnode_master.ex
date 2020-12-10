@@ -25,25 +25,38 @@ defmodule Vnode.Master do
     GenServer.call({__MODULE__, node}, {:sync_command, index, msg}, :infinity)
   end
 
+  def get_vnode_pid(index) do
+    case Registry.lookup(Registry.Vnode, index) do
+      [{pid, _}] -> pid
+      _ ->
+        DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, index})
+    end
+  end
+
   @impl true
   def init(:ok) do
-    Vnode.Manager.start_ring()
+    {:ok, ring} = Ring.Manager.get_my_ring()
+    startable_vnodes = Ring.my_indices(ring)
+
+    for index <- startable_vnodes do
+      DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, index})
+    end
     {:ok, []}
   end
 
   @impl true
   def handle_cast({:command, index, msg}, state) do
     Logger.info("#{Node.self()} received command #{inspect(msg)}")
-    pid = Vnode.Manager.get_vnode_pid(index)
+    pid = get_vnode_pid(index)
     GenServer.cast(pid, msg)
     {:noreply, state}
   end
 
-  # Find pid of vnode responsible for hat index and send command.
+  # Find pid of vnode responsible for hash index and send command.
   @impl true
   def handle_call({:sync_command, index, msg}, _from, state) do
     Logger.info("#{Node.self()} received sync command #{inspect(msg)}")
-    pid = Vnode.Manager.get_vnode_pid(index)
+    pid = get_vnode_pid(index)
     result = GenServer.call(pid, msg, :infinity)
     {:reply, result, state}
   end

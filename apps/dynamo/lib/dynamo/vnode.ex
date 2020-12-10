@@ -39,6 +39,7 @@ defmodule Vnode do
   # data is a map of %{index => %{key => value}}
   @impl true
   def init(partition) do
+    Registry.register(Registry.Vnode, partition, Node.self())
     # map for each replicated partitions
     data =
       partition

@@ -74,15 +74,6 @@ defmodule Ring.Claimant do
     {changed, new_ring}
   end
 
-  # def maybe_update_ring(node, ring) do
-  #   case ring.claimant do
-  #     ^node when not Ring.claiming_members(ring) != [] ->
-  #       {changed, ring_2} = update_ring(node, ring)
-  #     _ ->
-  #       {false, ring}
-  #   end
-  # end
-
   def rebalance(ring) do
     Ring.claiming_members(ring)
     |> Enum.reduce(

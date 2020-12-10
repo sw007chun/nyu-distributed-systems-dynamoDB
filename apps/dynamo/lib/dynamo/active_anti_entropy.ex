@@ -23,7 +23,7 @@ defmodule ActiveAntiEntropy do
     GenServer.call(__MODULE__, {:get_segments, index, segment_list})
   end
 
-  def start_aae() do
+  def start() do
     GenServer.cast(__MODULE__, :start_aae)
   end
 

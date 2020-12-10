@@ -8,13 +8,13 @@ defmodule Dynamo.Supervisor do
   @impl true
   def init(:ok) do
     port =
-      String.to_integer(System.get_env("PORT") || Application.get_env(:dynamo, :port) || "4044")
+      String.to_integer(System.get_env("PORT") || Application.get_env(:dynamo, :port) || "4040")
 
     children = [
+      {Registry, keys: :unique, name: Registry.Vnode},
       {DynamicSupervisor, name: Vnode.Supervisor, strategy: :one_for_one},
       {Task.Supervisor, name: Dynamo.TaskSupervisor},
       {Ring.Manager, name: Ring.Manager},
-      {Vnode.Manager, name: Vnode.Manager},
       {Ring.Gossip, name: Ring.Gossip},
       {Vnode.Master, name: Vnode.Master},
       {ActiveAntiEntropy, name: ActiveAntiEntropy},

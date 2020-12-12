@@ -31,6 +31,11 @@ defmodule Ring.Manager do
     GenServer.call(__MODULE__, {:set_my_ring, new_ring})
   end
 
+  @spec get_random_vnode :: node_entry()
+  def get_random_vnode do
+    GenServer.call(__MODULE__, :get_random_vnode)
+  end
+
   @doc """
   Return preference list of size n_val
   """
@@ -82,6 +87,18 @@ defmodule Ring.Manager do
   @impl true
   def handle_call({:set_my_ring, new_ring}, _from, _prev_ring) do
     {:reply, new_ring, new_ring}
+  end
+
+  @impl true
+  def handle_call(:get_random_vnode, _from, ring) do
+    my_node = Node.self()
+    all_vnodes = ring |> Ring.all_index_owners
+    active_members = Ring.active_members(ring)
+    random_vnode =
+      all_vnodes
+      |> Enum.filter(fn {_i, owner} -> owner == my_node and owner in active_members end)
+      |> Enum.random
+    {:reply, random_vnode, ring}
   end
 
   @impl true

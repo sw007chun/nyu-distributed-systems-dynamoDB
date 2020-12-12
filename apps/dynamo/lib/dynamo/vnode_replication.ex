@@ -50,11 +50,15 @@ defmodule Vnode.Replication do
 
   @read_repair_timeout 10
 
-  def replicate_get(key, value, context, state) do
-    my_index = state.partition
-    pref_list = Ring.Manager.get_self_exclusive_pref_list(my_index, state.replication - 1)
-    num_read = min(length(pref_list) + 1, state.read)
-    nonce = :erlang.phash2({key, value, context})
+  def get_reponses(key, state) do
+    my_node = Node.self()
+    pref_list =
+      CHash.hash_of(key)
+      |> Ring.Manager.get_preference_list(state.replication)
+    [{partition_index, _} | _] = pref_list
+
+    num_read = min(length(pref_list), state.read)
+    nonce = :erlang.phash2(key)
 
     Logger.info("Waiting for R replies")
 
@@ -63,28 +67,92 @@ defmodule Vnode.Replication do
     {:ok, task_pid} =
       Dynamo.TaskSupervisor
       |> Task.Supervisor.start_child(fn ->
-        wait_read_response(key, value, my_index, context, state, 1, num_read, pid, nonce)
+        wait_read_response(0, num_read, pid, nonce, [])
       end)
 
     # send asynchronous replication task to other vnodes
     for {index, node} <- pref_list do
-      GenServer.cast(
-        {Vnode.Master, node},
-        {:command, index,
-          {:get_repl, task_pid, my_index, key, nonce, true}}
-      )
+      cond do
+        node == my_node ->
+          # This is to avoid deadlock from calling another sync command to the Vnode.Master
+          # This can be mediated by coordinating get() from the client
+          vpid = Vnode.Master.get_vnode_pid(index)
+          GenServer.cast(vpid, {:get_repl, task_pid, partition_index, key, nonce, true})
+        true ->
+          GenServer.cast(
+            {Vnode.Master, node},
+            {:command, index,
+              {:get_repl, task_pid, partition_index, key, nonce, true}}
+          )
+        end
     end
 
     receive do
-      {:ok, value} ->
-        # This is timer to stop read repair process.
-        Dynamo.TaskSupervisor
-        |> Task.Supervisor.start_child(fn ->
-          Process.sleep(@read_repair_timeout)
-          send(task_pid, :timeout)
-        end)
+      {:ok, returned_values} ->
+        case reconcile_values(returned_values) do
+          {context, value, :concurrent} ->
+            # for node -> pref_list do
+            #   GenServer.cast(sender, {:put_repl, index, key, value, context, nil, nil, true})
+            # end
+            value
 
-        value
+          {context, value, stale_nodes} ->
+            # This is timer to stop read repair process.
+            # Dynamo.TaskSupervisor
+            # |> Task.Supervisor.start_child(fn ->
+            #   Process.sleep(@read_repair_timeout)
+            #   send(task_pid, :timeout)
+            # end)
+            for node <- stale_nodes do
+              GenServer.cast(node, {:put_repl, partition_index, key, value, context, nil, nil, true})
+            end
+            value
+        end
+    end
+  end
+
+  defp reconcile_values(returned_values) do
+    # Merge all clocks
+    {vclocks, _} = Enum.unzip(returned_values)
+
+    latest_vclocks = Vclock.get_latest_vclocks(vclocks)
+
+    {latest_data, stale_data} =
+      returned_values
+      |> Enum.split_with(
+        fn {context, _} -> context in latest_vclocks end)
+
+    {_, stale_data} = Enum.unzip(stale_data)
+    {_, stale_vnodes} = Enum.unzip(stale_data)
+
+    {_, latest_data} = Enum.unzip(latest_data)
+    {latest_values, _} = Enum.unzip(latest_data)
+    latest_values = Enum.concat(latest_values)
+    IO.puts inspect latest_values
+
+    cond do
+      length(latest_vclocks) == 1 ->
+        [latest_vclock] = latest_vclocks
+        [latest_value | _] = latest_values
+        IO.puts inspect latest_values
+        {latest_vclock, latest_value, stale_vnodes}
+      true ->
+        merged_vclock = Vclock.merge_vclocks(latest_vclocks)
+        latest_values = Enum.uniq(latest_values)
+        {merged_vclock, latest_values, :concurrent}
+    end
+  end
+
+  defp wait_read_response(current_read, num_read, parent, _nonce, acc) when current_read == num_read do
+    send(parent, {:ok, acc})
+  end
+
+  defp wait_read_response(current_read, num_read, parent, nonce, acc) do
+    receive do
+      {:ok, ^nonce, data} ->
+        wait_read_response(current_read + 1, num_read, parent, nonce, [data | acc])
+      _ ->
+        {:error, :wrong_nonce}
     end
   end
 
@@ -100,7 +168,7 @@ defmodule Vnode.Replication do
     if current_read < state.replication do
       receive do
         {:ok, ^nonce, ^key, {other_value, other_context}, sender} ->
-          case VClock.compare_vclocks(context, other_context) do
+          case Vclock.compare_vclocks(context, other_context) do
             :after ->
               # If my vlock is descendent of other vclock, put my value to the sender
               GenServer.cast(sender, {:put_repl, index, key, value, context, nil, nil, true})
@@ -122,12 +190,11 @@ defmodule Vnode.Replication do
               # Also, add all the values to the node and do a read repair to the sender
               new_context =
                 context
-                |> VClock.merge_vclocks(other_context)
-                |> VClock.increment(Node.self())
+                |> Vclock.merge_vclocks(other_context)
+                |> Vclock.increment(Node.self())
 
               new_value =
-                ([value] ++ [other_value])
-                |> List.flatten()
+                (value ++ other_value)
                 |> Enum.uniq()
                 |> Enum.sort()
                 |> List.delete(nil)
@@ -169,7 +236,7 @@ defmodule Vnode.Replication do
           state,
           current_read,
           nonce,
-          MapSet.new([value])
+          MapSet.new(value)
         )
       end)
 

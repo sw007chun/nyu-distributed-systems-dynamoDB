@@ -51,7 +51,7 @@ defmodule CHashTest do
     assert CHash.predecessors(<<0::160>>, partition_size, chash) ==
              Enum.reverse(CHash.successors(<<0::160>>, partition_size, chash))
 
-    assert CHash.predecessors(CHash.key_of(4), partition_size, updated_ring) ==
-             Enum.reverse(CHash.successors(CHash.key_of(4), partition_size, updated_ring))
+    assert CHash.predecessors(CHash.hash_of(4), partition_size, updated_ring) ==
+             Enum.reverse(CHash.successors(CHash.hash_of(4), partition_size, updated_ring))
   end
 end

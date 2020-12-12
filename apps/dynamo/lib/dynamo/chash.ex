@@ -53,8 +53,8 @@ defmodule CHash do
   @doc """
   Return SHA-1 hash value of an object
   """
-  @spec key_of(term()) :: index()
-  def key_of(object_name) do
+  @spec hash_of(term()) :: index()
+  def hash_of(object_name) do
     # argument should be converted to binary
     :crypto.hash(:sha, :erlang.term_to_binary(object_name))
   end

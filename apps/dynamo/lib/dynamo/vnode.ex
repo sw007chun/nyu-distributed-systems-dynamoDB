@@ -56,8 +56,8 @@ defmodule Vnode do
     Logger.info("#{Node.self()} put #{key}: #{value} to #{state.partition}")
 
     storage = Vnode.Master.get_partition_storage(state.partition)
-    {_, context} = Agent.get(storage, &Map.get(&1, key, {nil, %{}}))
-    context = VClock.increment(context, Node.self())
+    {_, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
+    context = Vclock.increment(context, Node.self())
     Agent.update(storage, &Map.put(&1, key, {value, context}))
 
     # Method for receiving put response from replication vnodes
@@ -69,19 +69,19 @@ defmodule Vnode do
 
   @impl true
   def handle_call({:get, key}, _from, state) do
-    storage = Vnode.Master.get_partition_storage(state.partition)
-    {value, context} = Agent.get(storage, &Map.get(&1, key, {nil, %{}}))
-    Logger.info("#{Node.self()} get #{key}: #{value}")
+    # storage = Vnode.Master.get_partition_storage(state.partition)
+    # {value, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
 
     # Spawn task to wait for R reponses from other vnodes
     task =
       Dynamo.TaskSupervisor
       |> Task.Supervisor.async(fn ->
-        Vnode.Replication.replicate_get(key, value, context, state)
+        Vnode.Replication.get_reponses(key, state)
       end)
 
     Process.sleep(random_delay(@mean))
     value = Task.await(task, :infinity)
+    Logger.info("#{Node.self()} get #{key}: #{value}")
 
     {:reply, value, state}
   end
@@ -91,7 +91,7 @@ defmodule Vnode do
   @impl true
   def handle_call({:get_all, key}, _from, state) do
     storage = Vnode.Master.get_partition_storage(state.partition)
-    {value, context} = Agent.get(storage, &Map.get(&1, key, {nil, %{}}))
+    {value, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
 
     result = Vnode.Replication.get_all_read(key, value, context, state)
     Logger.debug("#{inspect value}, #{inspect result}")
@@ -120,15 +120,16 @@ defmodule Vnode do
   # Callback for get values from replicas
   @impl true
   def handle_cast({:get_repl, sender, index, key, nonce, delay}, state) do
-    # Logger.info("Returning #{key} value stored in replica")
     storage = Vnode.Master.get_partition_storage(index)
-    value_context = Agent.get(storage, &Map.get(&1, key, {nil, %{}}))
+    {value, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
 
     if delay do
       Process.sleep(random_delay(@mean))
     end
 
-    send(sender, {:ok, nonce, key, value_context, self()})
+    Logger.info("Returning #{key}: #{value} stored in replica")
+    # send(sender, {:ok, nonce, key, value_context, self()})
+    send(sender, {:ok, nonce, {context, {value, self()}}})
     {:noreply, state}
   end
 end

@@ -53,6 +53,12 @@ defmodule KVServer.Command do
     {:ok, "OK\n"}
   end
 
+  # Deleting is just putting empty value to the key.
+  def run({:delete, key}) do
+    KV.put(key, [])
+    {:ok, "OK\n"}
+  end
+
   def parse(line) do
     case String.split(line) do
       ["JOIN", node] -> {:ok, {:join, node}}
@@ -62,6 +68,7 @@ defmodule KVServer.Command do
       ["START_AAE"] -> {:ok, :start_aae}
       ["GET", key] -> {:ok, {:get, key}}
       ["PUT", key, value] -> {:ok, {:put, key, value}}
+      ["DELETE", key] -> {:ok, {:delete, key}}
       _ -> {:error, :unknown_command}
     end
   end

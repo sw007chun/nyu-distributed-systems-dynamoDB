@@ -10,14 +10,22 @@ defmodule KV do
     Ring.print_status(ring)
   end
 
+  @doc """
+  Put value to Dynamo DB.
+  Value is represented as a list.
+  """
   @spec put(term(), term()) :: term()
   def put(key, value) do
-    sync_command(key, {:put, key, value})
+    sync_command(key, {:put, key, [value]})
   end
 
+  @doc """
+  Get command can be coordinated by any vnode.
+  """
   @spec get(term()) :: term()
   def get(key) do
-    sync_command(key, {:get, key})
+    random_vnode = Ring.Manager.get_random_vnode()
+    Vnode.Master.sync_command(random_vnode, {:get, key})
   end
 
   @spec get_all(term()) :: term()
@@ -59,7 +67,7 @@ defmodule KV do
   # Send a sync command to 1st vnode in the preference list
   @spec sync_command(term(), term()) :: term()
   def sync_command(key, command) do
-    index = CHash.key_of(key)
+    index = CHash.hash_of(key)
     preflist = Ring.Manager.get_preference_list(index, 1)
     [index_node] = preflist
     Vnode.Master.sync_command(index_node, command)
@@ -70,14 +78,14 @@ defmodule KV do
   # This intentinally put a value into a vnode without replication
   # This is for making concurrent values in the cluster
   def put_single(key, value) do
-    [{key_index, _}] = CHash.key_of(key) |> Ring.Manager.get_preference_list(1)
+    [{key_index, _}] = CHash.hash_of(key) |> Ring.Manager.get_preference_list(1)
     storage = Vnode.Master.get_partition_storage(key_index)
-    {_, context} = Agent.get(storage, &Map.get(&1, key, {nil, %{}}))
-    context = VClock.increment(context, Node.self())
-    Agent.update(storage, &Map.put(&1, key, {value, context}))
+    {_, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
+    context = Vclock.increment(context, Node.self())
+    Agent.update(storage, &Map.put(&1, key, {[value], context}))
 
     Logger.debug("Putting single #{key}: #{value} at #{key_index}. New context: #{inspect(context)}")
-    ActiveAntiEntropy.insert(key, value, key_index)
+    ActiveAntiEntropy.insert(key, [value], key_index)
     :ok
   end
 

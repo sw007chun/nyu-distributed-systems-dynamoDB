@@ -27,7 +27,7 @@ defmodule Vnode.Master do
 
   # Return pid of vnode in charge of partition
   @spec get_vnode_pid(non_neg_integer()) :: pid()
-  defp get_vnode_pid(partition) do
+  def get_vnode_pid(partition) do
     case Registry.lookup(Registry.Vnode, partition) do
       [{pid, _}] -> pid
       _ ->

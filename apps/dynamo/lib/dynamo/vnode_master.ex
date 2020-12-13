@@ -43,8 +43,13 @@ defmodule Vnode.Master do
       [{pid, _}] -> pid
       [] ->
         name = {:via, Registry, {Registry.Vnode, {"Storage", partition}}}
-        {:ok, pid} = Agent.start_link(fn -> %{} end, name: name)
-        pid
+        case Agent.start_link(fn -> %{} end, name: name) do
+          {:ok, pid} ->
+            pid
+          {:error, {:already_started, pid}} ->
+            Registry.register(Registry.Vnode, {"Storage", partition}, pid)
+            pid
+        end
     end
   end
 

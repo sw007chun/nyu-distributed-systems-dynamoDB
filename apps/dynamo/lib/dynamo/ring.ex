@@ -15,7 +15,8 @@ defmodule Ring do
   @type index_as_int() :: integer()
   @type node_entry() :: {index_as_int(), chash_node()}
   @type node_name() :: atom()
-  @type members() :: %{node_name() => {member_status(), Vclock}}
+  @type vclock() :: map()
+  @type members() :: %{node_name() => {member_status(), vclock()}}
   @type member_status() :: :joining | :valid | :invalid | :leaving | :exiting | :down
   @type ring :: Ring
 

@@ -1,5 +1,7 @@
 defmodule KVServer.Command do
-  @doc """
+  @moduledoc """
+  Commands for key/value store.
+
   This module is from
   https://elixir-lang.org/getting-started/mix-otp/docs-tests-and-with.html#running-commands
 
@@ -45,17 +47,17 @@ defmodule KVServer.Command do
       else
         value
       end
-    {:ok, "#{value}\n"}
+    {:ok, "#{inspect value}\n"}
   end
 
   def run({:put, key, value}) do
-    KV.put(key, value)
+    KV.put(key, value, :no_context)
     {:ok, "OK\n"}
   end
 
   # Deleting is just putting empty value to the key.
   def run({:delete, key}) do
-    KV.put(key, [])
+    KV.put(key, [], :no_context)
     {:ok, "OK\n"}
   end
 

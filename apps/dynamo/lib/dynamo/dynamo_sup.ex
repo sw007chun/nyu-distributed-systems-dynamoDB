@@ -1,4 +1,7 @@
 defmodule Dynamo.Supervisor do
+  @moduledoc """
+  Supervisor for starting Dynamo application.
+  """
   use Supervisor
 
   def start_link(opts) do

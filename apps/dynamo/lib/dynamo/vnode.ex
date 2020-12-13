@@ -52,12 +52,17 @@ defmodule Vnode do
   # Put update the vclock and put (key, {value, context}) pair into the db.
   # Responde after getting W replicated reponses back.
   @impl true
-  def handle_call({:put, key, value}, _from, state) do
+  def handle_call({:put, key, value, context}, _from, state) do
     Logger.info("#{Node.self()} put #{key}: #{value} to #{state.partition}")
 
     storage = Vnode.Master.get_partition_storage(state.partition)
-    {_, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
-    context = Vclock.increment(context, Node.self())
+    context =
+      if context == :no_context do
+        {_, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
+        context
+      else
+        Vclock.increment(context, Node.self())
+      end
     Agent.update(storage, &Map.put(&1, key, {value, context}))
 
     # Method for receiving put response from replication vnodes
@@ -81,7 +86,7 @@ defmodule Vnode do
 
     Process.sleep(random_delay(@mean))
     value = Task.await(task, :infinity)
-    Logger.info("#{Node.self()} get #{key}: #{value}")
+    Logger.info("#{Node.self()} got #{key}: #{inspect value}")
 
     {:reply, value, state}
   end
@@ -90,13 +95,9 @@ defmodule Vnode do
   # Retrieves all current values from replication vnodes and checks consistency
   @impl true
   def handle_call({:get_all, key}, _from, state) do
-    storage = Vnode.Master.get_partition_storage(state.partition)
-    {value, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
-
-    result = Vnode.Replication.get_all_read(key, value, context, state)
-    Logger.debug("#{inspect value}, #{inspect result}")
-
-    {:reply, value == result, state}
+    result = Vnode.Replication.get_all_reads(key, state)
+    Logger.info "Get all: #{result}"
+    {:reply, result, state}
   end
 
   # Callback for put replication.
@@ -106,12 +107,12 @@ defmodule Vnode do
     Agent.update(storage, &Map.put(&1, key, {value, context}))
     ActiveAntiEntropy.insert(key, value, index)
 
-    if not read_repair? do
-      Logger.debug("#{Node.self()} replicating #{key}: #{value}")
+    if read_repair? do
+      Logger.debug("#{Node.self()} read repairing #{key}: #{value}")
+    else
+      Logger.debug("#{Node.self()} replicating #{key}: #{inspect value}")
       Process.sleep(random_delay(@mean))
       send(sender, {:ok, nonce})
-    else
-      Logger.debug("#{Node.self()} read repairing #{key}: #{value}")
     end
 
     {:noreply, state}
@@ -122,13 +123,12 @@ defmodule Vnode do
   def handle_cast({:get_repl, sender, index, key, nonce, delay}, state) do
     storage = Vnode.Master.get_partition_storage(index)
     {value, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
+    Logger.info("#{Node.self()} returning #{key}: #{value} stored in replica")
 
     if delay do
       Process.sleep(random_delay(@mean))
     end
 
-    Logger.info("Returning #{key}: #{value} stored in replica")
-    # send(sender, {:ok, nonce, key, value_context, self()})
     send(sender, {:ok, nonce, {context, {value, self()}}})
     {:noreply, state}
   end

@@ -1,4 +1,7 @@
 defmodule MerkleTree do
+  @moduledoc """
+  Merkle Tree implementation for Active Anti Entropy.
+  """
   @num_segments 4
   @width 2
   @num_level 2

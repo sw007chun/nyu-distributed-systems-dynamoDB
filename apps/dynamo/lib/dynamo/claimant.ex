@@ -1,5 +1,7 @@
 defmodule Ring.Claimant do
-  # use GenServer
+  @moduledoc """
+  Module for vnodes/owner node distribution in the ring.
+  """
 
   @type ring() :: Ring
   @type node_name() :: atom()

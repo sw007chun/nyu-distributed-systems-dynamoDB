@@ -92,8 +92,8 @@ defmodule ActiveAntiEntropy do
 
           MerkleTree.compare_segments(my_segments, other_segments)
           |> Enum.map(fn {status, key} ->
-            Logger.info("#{inspect status}: #{inspect key}")
-            Logger.info inspect KV.get(key)
+            Logger.debug("#{inspect status}: #{inspect key}")
+            Logger.debug inspect KV.get(key)
           end)
         end
       end

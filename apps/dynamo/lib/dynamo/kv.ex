@@ -1,4 +1,7 @@
 defmodule KV do
+  @moduledoc """
+  Key/Value store implementation.
+  """
   require Logger
 
   def ping do
@@ -14,9 +17,9 @@ defmodule KV do
   Put value to Dynamo DB.
   Value is represented as a list.
   """
-  @spec put(term(), term()) :: term()
-  def put(key, value) do
-    sync_command(key, {:put, key, [value]})
+  @spec put(term(), term(), map() | :no_context) :: term()
+  def put(key, value, context) do
+    sync_command(key, {:put, key, [value], context})
   end
 
   @doc """
@@ -47,10 +50,9 @@ defmodule KV do
   def try_until_stable(key) do
     _ = get(key)
 
-    if get_all(key) != false do
-      now()
-    else
-      try_until_stable(key)
+    case get_all(key) do
+      true -> now()
+      false -> try_until_stable(key)
     end
   end
 

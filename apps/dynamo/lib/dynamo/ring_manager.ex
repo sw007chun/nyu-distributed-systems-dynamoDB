@@ -21,6 +21,11 @@ defmodule Ring.Manager do
     {:ok, ring}
   end
 
+  @spec key_partition_index(term()) :: index_as_int()
+  def key_partition_index(key) do
+    GenServer.call(__MODULE__, {:key_partition_index, key})
+  end
+
   @spec get_my_ring :: ring()
   def get_my_ring do
     GenServer.call(__MODULE__, :get_my_ring)
@@ -82,6 +87,12 @@ defmodule Ring.Manager do
   @impl true
   def handle_call(:get_my_ring, _from, ring) do
     {:reply, {:ok, ring}, ring}
+  end
+
+  @impl true
+  def handle_call({:key_partition_index, key}, _from, ring) do
+    index = CHash.partition_index(key, ring.chring)
+    {:reply, index, ring}
   end
 
   @impl true

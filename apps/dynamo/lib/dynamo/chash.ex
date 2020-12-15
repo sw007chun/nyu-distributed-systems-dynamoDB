@@ -78,14 +78,14 @@ defmodule CHash do
   end
 
   @doc """
-  Given hash key value of the object
-  return the index of next partition node
+  Return the index of partition node in charge of the key
   """
-  @spec next_index(integer(), %CHash{}) :: index_as_int()
-  def next_index(integer_key, chash) do
+  @spec partition_index(term(), %CHash{}) :: index_as_int()
+  def partition_index(key, chash) do
+    <<key_index::160>> = hash_of(key)
     num_partitions = chash.num_partitions
     inc = ring_increment(num_partitions)
-    rem(div(integer_key, inc) + 1, num_partitions) * inc
+    rem(div(key_index, inc) + 1, num_partitions) * inc
   end
 
   @doc """

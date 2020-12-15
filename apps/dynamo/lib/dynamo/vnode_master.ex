@@ -25,15 +25,13 @@ defmodule Vnode.Master do
     GenServer.call({__MODULE__, node}, {:sync_command, index, msg}, :infinity)
   end
 
-  # Return pid of vnode in charge of partition
-  @spec get_vnode_pid(non_neg_integer()) :: pid()
-  def get_vnode_pid(partition) do
-    case Registry.lookup(Registry.Vnode, partition) do
-      [{pid, _}] -> pid
-      _ ->
-        {:ok, pid} = DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, partition})
-        pid
-    end
+  @doc """
+  Return key/value store of certain partition.
+  """
+  @spec get_my_data(non_neg_integer()) :: %{}
+  def get_my_data(partition) do
+    get_partition_storage(partition)
+    |> Agent.get(& &1)
   end
 
   # Return pid of Agent storing {key, value} pair of partition
@@ -42,6 +40,7 @@ defmodule Vnode.Master do
     case Registry.lookup(Registry.Vnode, {"Storage", partition}) do
       [{pid, _}] -> pid
       [] ->
+        # TODO: check partition number with the ring
         name = {:via, Registry, {Registry.Vnode, {"Storage", partition}}}
         case Agent.start_link(fn -> %{} end, name: name) do
           {:ok, pid} ->
@@ -50,6 +49,17 @@ defmodule Vnode.Master do
             Registry.register(Registry.Vnode, {"Storage", partition}, pid)
             pid
         end
+    end
+  end
+
+  # Return pid of vnode in charge of partition
+  @spec get_vnode_pid(non_neg_integer()) :: pid()
+  def get_vnode_pid(partition) do
+    case Registry.lookup(Registry.Vnode, partition) do
+      [{pid, _}] -> pid
+      _ ->
+        {:ok, pid} = DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, partition})
+        pid
     end
   end
 
@@ -66,6 +76,7 @@ defmodule Vnode.Master do
 
   @impl true
   def handle_cast({:command, index, msg}, state) do
+    Logger.info "received"
     pid = get_vnode_pid(index)
     GenServer.cast(pid, msg)
     {:noreply, state}

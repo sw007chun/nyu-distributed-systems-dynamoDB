@@ -17,8 +17,29 @@ import Config
 #       metadata: [:user_id]
 #
 
-config :dynamo,
-  ring_size: 8,
-  replication: 3,
-  R: 2,
-  W: 2
+case Mix.env() do
+  :prod ->
+    config :dynamo,
+      ring_size: 8,
+      read_repair: false,
+      aae: false,
+      replication: 3,
+      R: 2,
+      W: 2
+  :dev ->
+    config :dynamo,
+      ring_size: 8,
+      read_repair: true,
+      aae: false,
+      replication: 3,
+      R: 2,
+      W: 2
+  :test ->
+    config :dynamo,
+      ring_size: 8,
+      read_repair: true,
+      aae: true,
+      replication: 3,
+      R: 2,
+      W: 2
+end

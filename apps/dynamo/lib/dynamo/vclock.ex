@@ -107,7 +107,7 @@ defmodule Vclock do
               Vclock.compare_vclocks(latest_clock, candidate_clock) in [:before, :equal]
             end)
           [candidate_clock | pruned_clocks]
-        candidate_clock ->
+        false ->
           latest_clocks
       end
     end)

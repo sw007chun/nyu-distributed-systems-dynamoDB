@@ -11,25 +11,29 @@ defmodule Coordination do
 
   def wait_write_response(current_write, num_write) do
     Logger.info("W responses: #{current_write}/#{num_write}")
+
     receive do
       :ok ->
         wait_write_response(current_write + 1, num_write)
+
       other ->
-        Logger.info inspect other
+        Logger.info(inspect(other))
         wait_write_response(current_write, num_write)
     end
   end
 
   def wait_read_response(current_read, num_read, responses) when current_read == num_read do
-    Logger.info "R reponses: #{current_read}/#{num_read}"
+    Logger.info("R reponses: #{current_read}/#{num_read}")
     responses
   end
 
   def wait_read_response(current_read, num_read, responses) do
-    Logger.info "R reponses: #{current_read}/#{num_read}"
+    Logger.info("R reponses: #{current_read}/#{num_read}")
+
     receive do
       {:ok, data} ->
         wait_read_response(current_read + 1, num_read, [data | responses])
+
       _ ->
         wait_read_response(current_read, num_read, responses)
     end
@@ -72,6 +76,7 @@ defmodule Coordination do
             GenServer.cast(vnode, {:put_repl, key, value, context, nil, true})
           end
         end
+
         value
     end
   end
@@ -84,12 +89,15 @@ defmodule Coordination do
           if Vclock.compare_vclocks(context, latest_vclock) == :before do
             GenServer.cast(sender, {:put_repl, key, latest_value, latest_vclock, nil, true})
           end
+
           read_repair(current_read + 1, num_read, latest_vclock, key, latest_value)
+
         :timeout ->
           # Logger.info "Read repair timee out."
           :timeout
+
         other ->
-          Logger.info inspect other
+          Logger.info(inspect(other))
           read_repair(current_read, num_read, latest_vclock, key, latest_value)
       end
     end
@@ -108,8 +116,7 @@ defmodule Coordination do
 
     {latest_data, stale_data} =
       returned_values
-      |> Enum.split_with(
-        fn {context, _} -> context in latest_vclocks end)
+      |> Enum.split_with(fn {context, _} -> context in latest_vclocks end)
 
     {_, stale_data} = Enum.unzip(stale_data)
     {_, stale_vnodes} = Enum.unzip(stale_data)
@@ -118,13 +125,13 @@ defmodule Coordination do
     {latest_values, _} = Enum.unzip(latest_data)
 
     if length(latest_vclocks) == 1 do
-        [latest_vclock] = latest_vclocks
-        [latest_value | _] = latest_values
-        {latest_vclock, latest_value, stale_vnodes}
+      [latest_vclock] = latest_vclocks
+      [latest_value | _] = latest_values
+      {latest_vclock, latest_value, stale_vnodes}
     else
-        merged_vclock = Vclock.merge_vclocks(latest_vclocks)
-        latest_values = latest_values |> Enum.concat |> Enum.uniq
-        {merged_vclock, latest_values, :concurrent}
+      merged_vclock = Vclock.merge_vclocks(latest_vclocks)
+      latest_values = latest_values |> Enum.concat() |> Enum.uniq()
+      {merged_vclock, latest_values, :concurrent}
     end
   end
 end

@@ -17,7 +17,7 @@ defmodule Vclock do
 
   @spec merge_vclocks([vclock()]) :: vclock()
   def merge_vclocks(vclock_list) when is_list(vclock_list) do
-    Enum.reduce(vclock_list, %{}, &(merge_vclocks(&1, &2)))
+    Enum.reduce(vclock_list, %{}, &merge_vclocks(&1, &2))
   end
 
   @spec merge_vclocks(vclock(), vclock()) :: vclock()
@@ -90,26 +90,28 @@ defmodule Vclock do
   @spec get_latest_vclocks([vclock()]) :: [vclock()]
   def get_latest_vclocks(vclock_list) do
     vclock_list
-    |> Enum.reduce([%{}], fn candidate_clock, latest_clocks ->
-      # Check if any of the clocks in the latest clocks are later than the context
-      is_latest? =
-        not (latest_clocks
-        |> Enum.any?(fn latest_clock ->
-          Vclock.compare_vclocks(latest_clock, candidate_clock) == :after
-        end))
+    |> Enum.reduce(
+      [%{}],
+      fn candidate_clock, latest_clocks ->
+        # Check if any of the clocks in the latest clocks are later than the context
+        is_latest? =
+          not Enum.any?(latest_clocks, &(Vclock.compare_vclocks(&1, candidate_clock) == :after))
 
-      case is_latest? do
-        true ->
-          # Remove clocks that are before or equal to the context
-          pruned_clocks =
+        case is_latest? do
+          true ->
+            # Remove clocks that are before or equal to the context
+            pruned_clocks =
+              Enum.reject(
+                latest_clocks,
+                &(Vclock.compare_vclocks(&1, candidate_clock) in [:before, :equal])
+              )
+
+            [candidate_clock | pruned_clocks]
+
+          false ->
             latest_clocks
-            |> Enum.reject(fn latest_clock ->
-              Vclock.compare_vclocks(latest_clock, candidate_clock) in [:before, :equal]
-            end)
-          [candidate_clock | pruned_clocks]
-        false ->
-          latest_clocks
+        end
       end
-    end)
+    )
   end
 end

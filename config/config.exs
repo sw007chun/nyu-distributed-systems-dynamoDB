@@ -26,6 +26,7 @@ case Mix.env() do
       replication: 3,
       R: 2,
       W: 2
+
   :dev ->
     config :dynamo,
       ring_size: 8,
@@ -34,6 +35,7 @@ case Mix.env() do
       replication: 3,
       R: 2,
       W: 2
+
   :test ->
     config :dynamo,
       ring_size: 8,

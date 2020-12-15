@@ -14,7 +14,7 @@ defmodule Dynamo.Application do
       {Ring.Gossip, name: Ring.Gossip},
       {Vnode.Master, name: Vnode.Master},
       {ActiveAntiEntropy, name: ActiveAntiEntropy},
-      {DynamoServer, name: DynamoServer},
+      {DynamoServer, name: DynamoServer}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

@@ -36,12 +36,12 @@ defmodule Ring do
   end
 
   @spec new_ring(non_neg_integer(), node_name()) :: %Ring{
-    node_name: node_name(),
-    vclock: Vclock,
-    chring: CHash,
-    members: members(),
-    claimant: node_name()
-  }
+          node_name: node_name(),
+          vclock: Vclock,
+          chring: CHash,
+          members: members(),
+          claimant: node_name()
+        }
   def new_ring(ring_size, node_name) do
     vclock = Vclock.increment(Vclock.new_clock(), node_name)
 

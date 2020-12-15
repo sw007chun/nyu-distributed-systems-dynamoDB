@@ -47,11 +47,27 @@ defmodule VclockTest do
   end
 
   test "get latest clocks" do
-    assert Vclock.get_latest_vclocks([%{a: 1, b: 0, c: 0}, %{a: 1, b: 0, c: 0}, %{a: 2, b: 0, c: 0}])
-    == [%{a: 2, b: 0, c: 0}]
-    assert Vclock.get_latest_vclocks([%{a: 1, b: 0, c: 0}, %{a: 1, b: 1, c: 0}, %{a: 2, b: 0, c: 0}]) |> Enum.sort
-    == [%{a: 1, b: 1, c: 0}, %{a: 2, b: 0, c: 0}]
-    assert Vclock.get_latest_vclocks([%{a: 1, b: 0, c: 1}, %{a: 1, b: 1, c: 0}, %{a: 2, b: 0, c: 0}]) |> Enum.sort
-    == [%{a: 1, b: 0, c: 1}, %{a: 1, b: 1, c: 0}, %{a: 2, b: 0, c: 0}]
+    assert Vclock.get_latest_vclocks([
+             %{a: 1, b: 0, c: 0},
+             %{a: 1, b: 0, c: 0},
+             %{a: 2, b: 0, c: 0}
+           ]) ==
+             [%{a: 2, b: 0, c: 0}]
+
+    assert Vclock.get_latest_vclocks([
+             %{a: 1, b: 0, c: 0},
+             %{a: 1, b: 1, c: 0},
+             %{a: 2, b: 0, c: 0}
+           ])
+           |> Enum.sort() ==
+             [%{a: 1, b: 1, c: 0}, %{a: 2, b: 0, c: 0}]
+
+    assert Vclock.get_latest_vclocks([
+             %{a: 1, b: 0, c: 1},
+             %{a: 1, b: 1, c: 0},
+             %{a: 2, b: 0, c: 0}
+           ])
+           |> Enum.sort() ==
+             [%{a: 1, b: 0, c: 1}, %{a: 1, b: 1, c: 0}, %{a: 2, b: 0, c: 0}]
   end
 end

@@ -41,10 +41,12 @@ defmodule ActiveAntiEntropy do
 
     state =
       Ring.all_indices(ring)
-      |> Enum.reduce(state,
-      fn index, state0 ->
-        Map.put(state0, index, MerkleTree.new(index))
-      end)
+      |> Enum.reduce(
+        state,
+        fn index, state0 ->
+          Map.put(state0, index, MerkleTree.new(index))
+        end
+      )
 
     {:ok, state}
   end
@@ -53,9 +55,10 @@ defmodule ActiveAntiEntropy do
   def handle_call({:get_tree, index}, _from, state) do
     {tree, state} =
       Map.get_and_update!(state, index, fn tree ->
-      tree = MerkleTree.update_tree(tree)
-      {tree, tree}
-    end)
+        tree = MerkleTree.update_tree(tree)
+        {tree, tree}
+      end)
+
     {:reply, tree, state}
   end
 
@@ -64,6 +67,7 @@ defmodule ActiveAntiEntropy do
     segments =
       Map.get(state, index)
       |> MerkleTree.get_segments(segment_list)
+
     {:reply, segments, state}
   end
 
@@ -75,14 +79,14 @@ defmodule ActiveAntiEntropy do
   @impl true
   def handle_call(:start_aae, _from, state) do
     if state.started? do
-      Logger.info "Starting AAE at #{Node.self}"
+      Logger.info("Starting AAE at #{Node.self()}")
       {:ok, ring} = Ring.Manager.get_my_ring()
       my_indices = Ring.my_indices(ring)
 
       for index <- my_indices do
         # Do tree exchanges for the indices that this node is in charge of
         pref_list = Ring.Manager.get_self_exclusive_pref_list(index, state.replication - 1)
-        my = state |> Map.get(index) |> MerkleTree.update_tree
+        my = state |> Map.get(index) |> MerkleTree.update_tree()
 
         for {_i, other_node} <- pref_list do
           # compaire with other replicas
@@ -92,7 +96,9 @@ defmodule ActiveAntiEntropy do
           if not Enum.empty?(comparison) do
             Logger.info("Comparsion: #{Enum.join(comparison, ", ")}")
             my_segments = MerkleTree.get_segments(my, comparison)
-            other_segments = GenServer.call({__MODULE__, other_node}, {:get_segments, index, comparison})
+
+            other_segments =
+              GenServer.call({__MODULE__, other_node}, {:get_segments, index, comparison})
 
             differences = MerkleTree.compare_segments(my_segments, other_segments)
 
@@ -109,8 +115,9 @@ defmodule ActiveAntiEntropy do
       # To prevent live lock, after each tree exchange,
       # it will call next node in thing ring after @aae_freq
       member_list = Ring.active_members(ring)
+
       next_node =
-        member_list ++ member_list
+        (member_list ++ member_list)
         |> Enum.drop_while(fn node -> node != Node.self() end)
         |> Enum.at(1)
 
@@ -119,6 +126,7 @@ defmodule ActiveAntiEntropy do
         Process.sleep(@aae_freq)
         GenServer.call({__MODULE__, next_node}, :start_aae)
       end)
+
       {:reply, "AAE started", state}
     end
   end
@@ -129,6 +137,7 @@ defmodule ActiveAntiEntropy do
       Map.update!(state, index, fn tree ->
         MerkleTree.insert(tree, key, value)
       end)
+
     {:noreply, state}
   end
 end

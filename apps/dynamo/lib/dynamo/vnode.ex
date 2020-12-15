@@ -35,15 +35,25 @@ defmodule Vnode do
     # map for each replicated partitions
     data =
       partition
-      |> Ring.Manager.get_replicated_indices
-      |> MapSet.new
+      |> Ring.Manager.get_replicated_indices()
+      |> MapSet.new()
 
     replication = Application.get_env(:dynamo, :replication)
     read = Application.get_env(:dynamo, :R)
     write = Application.get_env(:dynamo, :W)
     read_repair = Application.get_env(:dynamo, :read_repair)
     aae = Application.get_env(:dynamo, :aae)
-    {:ok, %{partition: partition, data: data, replication: replication, read: read, write: write, read_repair: read_repair, aae: aae}}
+
+    {:ok,
+     %{
+       partition: partition,
+       data: data,
+       replication: replication,
+       read: read,
+       write: write,
+       read_repair: read_repair,
+       aae: aae
+     }}
   end
 
   # Put update the vclock and put (key, {value, context}) pair into the db.
@@ -53,6 +63,7 @@ defmodule Vnode do
     Logger.info("#{Node.self()} put #{key}: #{value} to #{state.partition}")
 
     storage = Vnode.Master.get_partition_storage(state.partition)
+
     context =
       if context == :no_context do
         {_, context} = Agent.get(storage, &Map.get(&1, key, {[], %{}}))
@@ -60,10 +71,21 @@ defmodule Vnode do
       else
         context
       end
+
     context = Vclock.increment(context, Node.self())
 
     # Method for receiving put response from replication vnodes
-    Vnode.Replication.replicate_put(key, value, context, state, return_pid)
+    pref_list = Ring.Manager.get_preference_list(state.partition - 1, state.replication)
+
+    Logger.info("Sending W replies")
+    # send asynchronous replication task to other vnodes
+    for {index, node} <- pref_list do
+      GenServer.cast(
+        {Vnode.Master, node},
+        {:command, index, {:put_repl, key, value, context, return_pid, false}}
+      )
+    end
+
     if state.aae do
       ActiveAntiEntropy.insert(key, value, state.partition)
     end
@@ -73,7 +95,20 @@ defmodule Vnode do
 
   @impl true
   def handle_cast({:get, key, return_pid}, state) do
-    Vnode.Replication.get_reponses(key, state, return_pid)
+    pref_list =
+      CHash.hash_of(key)
+      |> Ring.Manager.get_preference_list(state.replication)
+
+    [{partition_index, _} | _] = pref_list
+    Logger.info("Sending R replies")
+
+    # send asynchronous replication task to other vnodes
+    for {index, node} <- pref_list do
+      GenServer.cast(
+        {Vnode.Master, node},
+        {:command, index, {:get_repl, return_pid, partition_index, key, true}}
+      )
+    end
     {:noreply, state}
   end
 
@@ -93,7 +128,7 @@ defmodule Vnode do
     if read_repair? do
       Logger.debug("#{Node.self()} read repairing #{key}: #{value}")
     else
-      Logger.debug("#{Node.self()} replicating #{key}: #{inspect value}")
+      Logger.debug("#{Node.self()} replicating #{key}: #{inspect(value)}")
       send(sender, :ok)
     end
 

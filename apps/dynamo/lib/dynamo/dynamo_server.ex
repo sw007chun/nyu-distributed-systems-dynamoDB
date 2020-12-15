@@ -9,7 +9,7 @@ defmodule DynamoServer do
   @spec get_my_data(non_neg_integer()) :: %{}
   def get_my_data(partition) do
     partition
-    |> Vnode.Master.get_partition_storage
+    |> Vnode.Master.get_partition_storage()
     |> Agent.get(& &1)
   end
 
@@ -24,7 +24,7 @@ defmodule DynamoServer do
 
   @impl true
   def init(:ok) do
-    Logger.info "Dynamo server #{Node.self()} started."
+    Logger.info("Dynamo server #{Node.self()} started.")
     {:ok, []}
   end
 
@@ -33,6 +33,7 @@ defmodule DynamoServer do
     # TODO: This returns a node not vnode
     Ring.Manager.get_random_vnode()
     |> Vnode.Master.command({:get, key, return_pid})
+
     {:noreply, state}
   end
 
@@ -55,6 +56,12 @@ defmodule DynamoServer do
   end
 
   @impl true
+  def handle_call(:get_membership_info, _from, state) do
+    {:ok, ring} = Ring.Manager.get_my_ring()
+    {:reply, ring.chring, state}
+  end
+
+  @impl true
   def handle_call(:ring_status, _from, state) do
     {:ok, ring} = Ring.Manager.get_my_ring()
     {:reply, Ring.print_status(ring), state}
@@ -69,6 +76,8 @@ defmodule DynamoServer do
     end
   end
 
+  # This is a test code for putting a key/value pair into a single node only
+  # in order to create inconsistent data.
   @impl true
   def handle_call({:put_single, key, value}, _from, state) do
     [{key_index, _}] = CHash.hash_of(key) |> Ring.Manager.get_preference_list(1)
@@ -77,10 +86,14 @@ defmodule DynamoServer do
     context = Vclock.increment(context, Node.self())
     Agent.update(storage, &Map.put(&1, key, {[value], context}))
 
-    Logger.debug("Putting single #{key}: #{value} at #{key_index}. New context: #{inspect(context)}")
+    Logger.debug(
+      "Putting single #{key}: #{value} at #{key_index}. New context: #{inspect(context)}"
+    )
+
     if Application.get_env(:dynamo, :read_repair) do
       ActiveAntiEntropy.insert(key, [value], key_index)
     end
+
     {:reply, :ok, state}
   end
 end

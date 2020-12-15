@@ -9,7 +9,7 @@ defmodule DynamoClient.Application do
   def start(_type, _args) do
     children = [
       {Task.Supervisor, name: Client.TaskSupervisor, strategy: :one_for_one},
-      {DynamoClient, name: DynamoClient},
+      {DynamoClient, name: DynamoClient}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

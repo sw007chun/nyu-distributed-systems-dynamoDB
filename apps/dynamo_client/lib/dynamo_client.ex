@@ -15,6 +15,10 @@ defmodule DynamoClient do
     GenServer.call(__MODULE__, {:connect, node})
   end
 
+  def get_membership_info do
+    GenServer.call(__MODULE__, :get_membership_info)
+  end
+
   def put(key, value, context \\ :no_context) do
     GenServer.call(__MODULE__, {:put, key, value, context})
   end
@@ -28,15 +32,30 @@ defmodule DynamoClient do
     GenServer.call(__MODULE__, {:get, key})
   end
 
+  @spec pref_list(term(), non_neg_integer(), %CHash{}) :: term()
+  def pref_list(key, n_val, membership) do
+    index = CHash.hash_of(key)
+    successors = CHash.successors(index, 1, membership)
+
+  end
+
   @impl true
   def init(:ok) do
-    Logger.info "client started"
+    Logger.info("client started")
     replication = Application.get_env(:dynamo, :replication)
     read = Application.get_env(:dynamo, :R)
     write = Application.get_env(:dynamo, :W)
     read_repair = Application.get_env(:dynamo, :read_repair)
 
-    {:ok, %{node_list: [], replication: replication, read: read, write: write, read_repair: read_repair}}
+    {:ok,
+     %{
+       node_list: [],
+       replication: replication,
+       read: read,
+       write: write,
+       read_repair: read_repair,
+       membership_ring: nil
+     }}
   end
 
   @impl true
@@ -47,9 +66,17 @@ defmodule DynamoClient do
   end
 
   @impl true
+  def handle_call(:get_membership_info, _from, state) do
+    node = Enum.random(state.node_list)
+    membership = GenServer.call({DynamoServer, node}, :get_membership_info)
+    {:reply, :ok, %{state | membership_ring: membership}}
+  end
+
+  @impl true
   def handle_call({:put, key, value, context}, _from, state) do
     # TODO: keep own list of preference list
     node = Enum.random(state.node_list)
+
     task =
       Client.TaskSupervisor
       |> Task.Supervisor.async(fn ->

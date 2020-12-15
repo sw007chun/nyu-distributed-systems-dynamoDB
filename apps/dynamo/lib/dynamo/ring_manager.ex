@@ -103,12 +103,14 @@ defmodule Ring.Manager do
   @impl true
   def handle_call(:get_random_vnode, _from, ring) do
     my_node = Node.self()
-    all_vnodes = ring |> Ring.all_index_owners
+    all_vnodes = ring |> Ring.all_index_owners()
     active_members = Ring.active_members(ring)
+
     random_vnode =
       all_vnodes
       |> Enum.filter(fn {_i, owner} -> owner == my_node and owner in active_members end)
-      |> Enum.random
+      |> Enum.random()
+
     {:reply, random_vnode, ring}
   end
 
@@ -125,6 +127,7 @@ defmodule Ring.Manager do
       |> Enum.filter(fn {_i, node} ->
         node != Node.self()
       end)
+
     {:reply, successors, ring}
   end
 

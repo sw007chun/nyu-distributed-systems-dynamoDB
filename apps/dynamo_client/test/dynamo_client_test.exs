@@ -8,9 +8,7 @@ defmodule DynamoClientTest do
 
   @tag :distributed
   test "basic" do
-    nodes = LocalCluster.start_nodes("node-", 3, [
-      applications: [:dynamo]
-    ])
+    nodes = LocalCluster.start_nodes("node-", 3, applications: [:dynamo])
 
     [node1, node2, node3] = nodes
 
@@ -28,13 +26,14 @@ defmodule DynamoClientTest do
 
     :ok = GenServer.call({DynamoServer, node1}, {:put_single, :hello, "AAE"})
     assert GenServer.call({DynamoServer, node1}, :start_aae) == "AAE started"
-    Process.sleep(3_000)
+    Process.sleep(5_000)
 
     assert DynamoClient.get(:hello) == ["AAE"]
   end
 
   def read_repair(key, value, count) do
     [return_value] = DynamoClient.get(key)
+
     if return_value == value do
       count
     else

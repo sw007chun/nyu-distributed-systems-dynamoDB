@@ -38,13 +38,17 @@ defmodule Vnode.Master do
   @spec get_partition_storage(non_neg_integer()) :: pid()
   def get_partition_storage(partition) do
     case Registry.lookup(Registry.Vnode, {"Storage", partition}) do
-      [{pid, _}] -> pid
+      [{pid, _}] ->
+        pid
+
       [] ->
         # TODO: check partition number with the ring
         name = {:via, Registry, {Registry.Vnode, {"Storage", partition}}}
+
         case Agent.start_link(fn -> %{} end, name: name) do
           {:ok, pid} ->
             pid
+
           {:error, {:already_started, pid}} ->
             Registry.register(Registry.Vnode, {"Storage", partition}, pid)
             pid
@@ -56,7 +60,9 @@ defmodule Vnode.Master do
   @spec get_vnode_pid(non_neg_integer()) :: pid()
   def get_vnode_pid(partition) do
     case Registry.lookup(Registry.Vnode, partition) do
-      [{pid, _}] -> pid
+      [{pid, _}] ->
+        pid
+
       _ ->
         {:ok, pid} = DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, partition})
         pid
@@ -71,12 +77,13 @@ defmodule Vnode.Master do
     for index <- startable_vnodes do
       DynamicSupervisor.start_child(Vnode.Supervisor, {Vnode, index})
     end
+
     {:ok, []}
   end
 
   @impl true
   def handle_cast({:command, index, msg}, state) do
-    Logger.info "received"
+    Logger.info("received")
     pid = get_vnode_pid(index)
     GenServer.cast(pid, msg)
     {:noreply, state}

@@ -68,9 +68,23 @@ defmodule DynamoServer do
   end
 
   @impl true
+  def handle_call(:clear_storage, _from, state) do
+    Vnode.Master.clear_storage()
+    {:reply, :ok, state}
+  end
+
+
+  @impl true
+  def handle_call({:reset_vnode_param, param_list}, _from, state) do
+    Vnode.Master.reset_vnode_param(param_list)
+    {:reply, :ok, state}
+  end
+
+  @impl true
   def handle_call(:start_aae, _from, state) do
     if Application.get_env(:dynamo, :aae) do
-      {:reply, ActiveAntiEntropy.start(), state}
+      ActiveAntiEntropy.start()
+      {:reply, "AAE started", state}
     else
       {:reply, "AAE disabled", state}
     end

@@ -18,23 +18,20 @@ import Config
 #
 
 case Mix.env() do
-  :prod ->
+  env when env in [:dev, :prod] ->
     config :dynamo,
-      ring_size: 8,
+      ring_size: 16,
       read_repair: false,
       aae: false,
       replication: 3,
-      R: 2,
-      W: 2
+      R: 1,
+      W: 1,
+      aae_freq: 1_000,
+      write_delay: 3,
+      ars_delay: 0.25
 
-  :dev ->
-    config :dynamo,
-      ring_size: 8,
-      read_repair: true,
-      aae: false,
-      replication: 3,
-      R: 2,
-      W: 2
+    config :logger, :console,
+      level: :info
 
   :test ->
     config :dynamo,
@@ -43,5 +40,8 @@ case Mix.env() do
       aae: true,
       replication: 3,
       R: 2,
-      W: 2
+      W: 2,
+      aae_freq: 1_000,
+      write_delay: 0,
+      ars_delay: 0
 end

@@ -19,6 +19,18 @@ defmodule DynamoClient do
     GenServer.call(__MODULE__, :get_membership_info)
   end
 
+  def clear_storage do
+    GenServer.call(__MODULE__, :clear_storage)
+  end
+
+  def reset_vnode_param(param_list) do
+    GenServer.call(__MODULE__, {:reset_vnode_param, param_list})
+  end
+
+  def reset_client_param(param_list) do
+    GenServer.call(__MODULE__, {:reset_client_param, param_list})
+  end
+
   def put(key, value, context \\ :no_context) do
     GenServer.call(__MODULE__, {:put, key, value, context})
   end
@@ -35,8 +47,7 @@ defmodule DynamoClient do
   @spec pref_list(term(), non_neg_integer(), %CHash{}) :: term()
   def pref_list(key, n_val, membership) do
     index = CHash.hash_of(key)
-    successors = CHash.successors(index, 1, membership)
-
+    CHash.successors(index, n_val, membership)
   end
 
   @impl true
@@ -62,21 +73,51 @@ defmodule DynamoClient do
   def handle_call({:connect, node}, _from, state) do
     connected? = Node.connect(node)
     node_list = Node.list()
-    {:reply, connected?, %{state | node_list: node_list}}
+    membership_ring = GenServer.call({DynamoServer, node}, :get_membership_info)
+    {:reply, connected?, %{state | node_list: node_list, membership_ring: membership_ring}}
   end
 
   @impl true
   def handle_call(:get_membership_info, _from, state) do
     node = Enum.random(state.node_list)
-    membership = GenServer.call({DynamoServer, node}, :get_membership_info)
-    {:reply, :ok, %{state | membership_ring: membership}}
+    membership_ring = GenServer.call({DynamoServer, node}, :get_membership_info)
+    {:reply, :ok, %{state | membership_ring: membership_ring}}
+  end
+
+  @impl true
+  def handle_call(:clear_storage, _from, state) do
+    state.node_list
+    |> Enum.map(fn node ->
+      GenServer.call({DynamoServer, node}, :clear_storage) end)
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:reset_vnode_param, param_list} , _from, state) do
+    state.node_list
+    |> Enum.map(fn node ->
+      GenServer.call({DynamoServer, node}, {:reset_vnode_param, param_list}) end)
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:reset_client_param, param_list} , _from, state) do
+    state =
+      param_list
+      |> Enum.reduce(state,
+      fn {key, value}, state0 -> %{state0 | key => value} end)
+    {:reply, :ok, state}
   end
 
   @impl true
   def handle_call({:put, key, value, context}, _from, state) do
-    # TODO: keep own list of preference list
-    node = Enum.random(state.node_list)
-
+    node =
+      if state.membership_ring do
+        [{_, top_node} | _] = pref_list(key, 1, state.membership_ring)
+        top_node
+      else
+        Enum.random(state.node_list)
+      end
     task =
       Client.TaskSupervisor
       |> Task.Supervisor.async(fn ->

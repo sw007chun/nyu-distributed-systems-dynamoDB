@@ -13,7 +13,7 @@ defmodule DynamoClientTest do
     [node1, node2, node3] = nodes
 
     GenServer.call({DynamoServer, node2}, {:join, node1})
-    GenServer.call({DynamoServer, node3}, {:join, node1})
+    GenServer.call({DynamoServer, node3}, {:join, node2})
     Process.sleep(1_000)
 
     assert DynamoClient.connect(node1) == true

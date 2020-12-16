@@ -5,12 +5,12 @@ defmodule Coordination do
   @type vclock() :: map()
 
   def wait_write_response(current_write, num_write) when current_write == num_write do
-    Logger.info("W responses: #{current_write}/#{num_write}")
+    Logger.debug("W responses: #{current_write}/#{num_write}")
     :ok
   end
 
   def wait_write_response(current_write, num_write) do
-    Logger.info("W responses: #{current_write}/#{num_write}")
+    Logger.debug("W responses: #{current_write}/#{num_write}")
 
     receive do
       :ok ->
@@ -23,12 +23,12 @@ defmodule Coordination do
   end
 
   def wait_read_response(current_read, num_read, responses) when current_read == num_read do
-    Logger.info("R reponses: #{current_read}/#{num_read}")
+    Logger.debug("R reponses: #{current_read}/#{num_read}")
     responses
   end
 
   def wait_read_response(current_read, num_read, responses) do
-    Logger.info("R reponses: #{current_read}/#{num_read}")
+    Logger.debug("R reponses: #{current_read}/#{num_read}")
 
     receive do
       {:ok, data} ->
@@ -39,15 +39,10 @@ defmodule Coordination do
     end
   end
 
-  def now() do
-    {mega, seconds, ms} = :os.timestamp()
-    (mega * 1_000_000 + seconds) * 1000 + :erlang.round(ms / 1000)
-  end
-
   @read_repair_timeout 10
 
   def get_reponses(key, node, state, supervisor) do
-    Logger.info("Waiting for R replies")
+    Logger.debug("Waiting for R replies")
 
     pid = self()
     # spawn a asynchronous task for receiving the ack from replicating vnodes
@@ -82,7 +77,7 @@ defmodule Coordination do
   end
 
   defp read_repair(current_read, num_read, latest_vclock, key, latest_value) do
-    # Logger.info "Read repair #{current_read}, #{num_read}"
+    Logger.debug "Read repair #{current_read}, #{num_read}"
     if current_read < num_read do
       receive do
         {:ok, {context, {_, sender}}} ->

@@ -43,17 +43,39 @@ defmodule Vnode.Master do
 
       [] ->
         # TODO: check partition number with the ring
-        name = {:via, Registry, {Registry.Vnode, {"Storage", partition}}}
+        name = {:via, Registry, {Registry.Vnode, {"Storage", partition}, :storage}}
 
         case Agent.start_link(fn -> %{} end, name: name) do
           {:ok, pid} ->
             pid
 
           {:error, {:already_started, pid}} ->
-            Registry.register(Registry.Vnode, {"Storage", partition}, pid)
+            Registry.register(Registry.Vnode, {"Storage", partition}, :storage)
             pid
         end
     end
+  end
+
+  @doc """
+  Clear all data in the storage.
+  """
+  def clear_storage do
+    storage_list = Registry.select(Registry.Vnode, [{{:_, :"$2", :"$3"}, [{:"==", :"$3", :storage}], [:"$2"]}])
+    for storage <- storage_list do
+      Agent.update(storage, fn _ -> %{} end)
+    end
+  end
+
+  @doc """
+  Reset vnode parameters.
+  """
+  @spec reset_vnode_param([{term(), term()}]) :: :ok
+  def reset_vnode_param(param_list) do
+    vnode_list = Registry.select(Registry.Vnode, [{{:_, :"$2", :"$3"}, [{:"==", :"$3", :vnode}], [:"$2"]}])
+    for vnode <- vnode_list do
+      GenServer.call(vnode, {:reset_param, param_list})
+    end
+    :ok
   end
 
   # Return pid of vnode in charge of partition
@@ -83,7 +105,6 @@ defmodule Vnode.Master do
 
   @impl true
   def handle_cast({:command, index, msg}, state) do
-    Logger.info("received")
     pid = get_vnode_pid(index)
     GenServer.cast(pid, msg)
     {:noreply, state}

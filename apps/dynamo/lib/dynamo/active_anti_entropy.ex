@@ -23,21 +23,21 @@ defmodule ActiveAntiEntropy do
   end
 
   def start() do
-    GenServer.call(__MODULE__, :start_aae)
+    GenServer.cast(__MODULE__, :start_aae)
   end
 
   def stop() do
     GenServer.call(__MODULE__, :stop_aae)
   end
 
-  @aae_freq 1_000
 
   @impl true
   def init(:ok) do
     {:ok, ring} = Ring.Manager.get_my_ring()
     replication = Application.get_env(:dynamo, :replication)
     read = Application.get_env(:dynamo, :R)
-    state = %{replication: replication, read: read, read_repair: true, started?: true}
+    aae_freq = Application.get_env(:dynamo, :aae_freq)
+    state = %{aae_freq: aae_freq, replication: replication, read: read, read_repair: true, started?: true}
 
     state =
       Ring.all_indices(ring)
@@ -77,7 +77,7 @@ defmodule ActiveAntiEntropy do
   end
 
   @impl true
-  def handle_call(:start_aae, _from, state) do
+  def handle_cast(:start_aae, state) do
     if state.started? do
       Logger.info("Starting AAE at #{Node.self()}")
       {:ok, ring} = Ring.Manager.get_my_ring()
@@ -105,6 +105,7 @@ defmodule ActiveAntiEntropy do
             for {_status, key} <- differences do
               Dynamo.TaskSupervisor
               |> Task.Supervisor.start_child(fn ->
+                # Do a get() request for any inconsistent data
                 Coordination.get_reponses(key, Node.self(), state, Dynamo.TaskSupervisor)
               end)
             end
@@ -121,13 +122,9 @@ defmodule ActiveAntiEntropy do
         |> Enum.drop_while(fn node -> node != Node.self() end)
         |> Enum.at(1)
 
-      Dynamo.TaskSupervisor
-      |> Task.Supervisor.start_child(fn ->
-        Process.sleep(@aae_freq)
-        GenServer.call({__MODULE__, next_node}, :start_aae)
-      end)
+      Process.send_after(self(), {:send_aae, next_node}, state.aae_freq)
 
-      {:reply, "AAE started", state}
+      {:noreply, state}
     end
   end
 
@@ -138,6 +135,12 @@ defmodule ActiveAntiEntropy do
         MerkleTree.insert(tree, key, value)
       end)
 
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:send_aae, next_node}, state) do
+    GenServer.cast({__MODULE__, next_node}, :start_aae)
     {:noreply, state}
   end
 end

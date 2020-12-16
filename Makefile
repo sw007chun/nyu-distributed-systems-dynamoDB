@@ -1,19 +1,31 @@
 .PHONY: foo bar baz
 
 foo:
-	mix release foo && PORT=4040  _build/dev/rel/foo/bin/foo start_iex
+	mix release foo && _build/dev/rel/foo/bin/foo start_iex
 
 bar:
-	mix release bar && PORT=4041 _build/dev/rel/bar/bin/bar start_iex
+	mix release bar && _build/dev/rel/bar/bin/bar start_iex
 
 baz:
-	mix release baz && PORT=4042 _build/dev/rel/baz/bin/baz start_iex
+	mix release baz && _build/dev/rel/baz/bin/baz start_iex
+
+panda:
+	mix release panda && _build/dev/rel/panda/bin/panda start_iex
+
+client:
+	mix release client && _build/dev/rel/client/bin/client start_iex
 
 start_foo:
-	mix release foo && PORT=4040 _build/dev/rel/foo/bin/foo start
+	mix release foo && _build/dev/rel/foo/bin/foo start
 
 start_bar:
-	mix release bar && PORT=4041 _build/dev/rel/bar/bin/bar start
+	mix release bar && _build/dev/rel/bar/bin/bar start
 
 start_baz:
-	mix release baz && PORT=4042 _build/dev/rel/baz/bin/baz start
+	mix release baz && _build/dev/rel/baz/bin/baz start
+
+start_panda:
+	mix release panda && _build/dev/rel/panda/bin/panda start
+
+start_client:
+	mix release client && _build/dev/rel/client/bin/client start

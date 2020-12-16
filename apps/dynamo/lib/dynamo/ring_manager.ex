@@ -21,6 +21,11 @@ defmodule Ring.Manager do
     {:ok, ring}
   end
 
+  @spec key_partition_index(term()) :: index_as_int()
+  def key_partition_index(key) do
+    GenServer.call(__MODULE__, {:key_partition_index, key})
+  end
+
   @spec get_my_ring :: ring()
   def get_my_ring do
     GenServer.call(__MODULE__, :get_my_ring)
@@ -29,6 +34,11 @@ defmodule Ring.Manager do
   @spec set_my_ring(ring()) :: :ok
   def set_my_ring(new_ring) do
     GenServer.call(__MODULE__, {:set_my_ring, new_ring})
+  end
+
+  @spec get_random_vnode :: node_entry()
+  def get_random_vnode do
+    GenServer.call(__MODULE__, :get_random_vnode)
   end
 
   @doc """
@@ -80,8 +90,28 @@ defmodule Ring.Manager do
   end
 
   @impl true
+  def handle_call({:key_partition_index, key}, _from, ring) do
+    index = CHash.partition_index(key, ring.chring)
+    {:reply, index, ring}
+  end
+
+  @impl true
   def handle_call({:set_my_ring, new_ring}, _from, _prev_ring) do
     {:reply, new_ring, new_ring}
+  end
+
+  @impl true
+  def handle_call(:get_random_vnode, _from, ring) do
+    my_node = Node.self()
+    all_vnodes = ring |> Ring.all_index_owners()
+    active_members = Ring.active_members(ring)
+
+    random_vnode =
+      all_vnodes
+      |> Enum.filter(fn {_i, owner} -> owner == my_node and owner in active_members end)
+      |> Enum.random()
+
+    {:reply, random_vnode, ring}
   end
 
   @impl true
@@ -97,6 +127,7 @@ defmodule Ring.Manager do
       |> Enum.filter(fn {_i, node} ->
         node != Node.self()
       end)
+
     {:reply, successors, ring}
   end
 

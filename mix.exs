@@ -28,6 +28,16 @@ defmodule DynamoProject.MixProject do
           version: "0.0.1",
           applications: [dynamo: :permanent],
           cookie: "weknoweachother"
+        ],
+        panda: [
+          version: "0.0.1",
+          applications: [dynamo: :permanent],
+          cookie: "weknoweachother"
+        ],
+        client: [
+          version: "0.0.1",
+          applications: [dynamo_client: :permanent],
+          cookie: "weknoweachother"
         ]
       ]
     ]

@@ -7,12 +7,19 @@ defmodule Dynamo.Application do
 
   def start(_type, _args) do
     children = [
-      Dynamo.Supervisor
+      {Registry, keys: :unique, name: Registry.Vnode},
+      {DynamicSupervisor, name: Vnode.Supervisor, strategy: :one_for_one},
+      {Task.Supervisor, name: Dynamo.TaskSupervisor},
+      {Ring.Manager, name: Ring.Manager},
+      {Ring.Gossip, name: Ring.Gossip},
+      {Vnode.Master, name: Vnode.Master},
+      {ActiveAntiEntropy, name: ActiveAntiEntropy},
+      {DynamoServer, name: DynamoServer}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Dynamo.Supervisor]
+    opts = [strategy: :one_for_all, name: Dynamo.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end
